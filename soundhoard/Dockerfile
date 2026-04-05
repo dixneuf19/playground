@@ -23,6 +23,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app /app
+WORKDIR /app
 ENV PATH="/app/.venv/bin:$PATH"
 
 CMD ["python", "-m", "soundhoard"]
