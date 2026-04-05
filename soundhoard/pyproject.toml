@@ -1,0 +1,13 @@
+[project]
+name = "soundhoard"
+version = "0.1.0"
+description = "Telegram bot that downloads YouTube audio to a Navidrome library"
+requires-python = ">=3.12"
+dependencies = [
+    "python-telegram-bot>=21.0",
+    "yt-dlp>=2024.0",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+soundhoard = "soundhoard.bot:main"
