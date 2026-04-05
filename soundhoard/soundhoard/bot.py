@@ -71,20 +71,24 @@ async def handle_message(update: Update, _context: object) -> None:
     total_new = len(new_tracks)
     total_skipped = len(skipped)
 
+    is_playlist = total_found > 1
+
     if not new_tracks:
         await reply.edit_text(f"Found {total_found} track(s), all already in library.")
         return
 
-    skip_info = f", {total_skipped} already in library" if total_skipped else ""
-    await reply.edit_text(
-        f"Found {total_found} track(s){skip_info}. Downloading {total_new}..."
-    )
+    if is_playlist:
+        skip_info = f", {total_skipped} already in library" if total_skipped else ""
+        await reply.edit_text(
+            f"Found {total_found} track(s){skip_info}. Downloading {total_new}..."
+        )
 
     done = []
     failed = []
     for i, track in enumerate(new_tracks, 1):
+        progress = f"[{i}/{total_new}] " if is_playlist else ""
         await reply.edit_text(
-            f"[{i}/{total_new}] Downloading - _{track.title}_",
+            f"{progress}Downloading - _{track.title}_",
             parse_mode="Markdown",
         )
         try:
