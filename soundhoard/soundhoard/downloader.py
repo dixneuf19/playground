@@ -16,7 +16,6 @@ MAX_RETRIES = 2
 class TrackInfo:
     video_id: str
     title: str
-    filename: str
 
 
 class DownloadRegistry:
@@ -73,24 +72,23 @@ def extract_info(url: str) -> list[TrackInfo]:
         video_id = info.get("id")
         if not video_id:
             return []
-        return [
-            TrackInfo(
-                video_id=video_id, title=info.get("title", "Unknown"), filename=""
-            )
-        ]
+        return [TrackInfo(video_id=video_id, title=info.get("title", "Unknown"))]
 
     return [
         TrackInfo(
             video_id=entry["id"],
             title=entry.get("title", "Unknown"),
-            filename="",
         )
         for entry in info["entries"]
         if entry is not None and entry.get("id")
     ]
 
 
-def download_single(video_url: str, download_dir: str) -> str:
+def video_url(video_id: str) -> str:
+    return f"https://www.youtube.com/watch?v={video_id}"
+
+
+def download_single(video_id: str, download_dir: str) -> str:
     """Download a single video's audio. Returns the output filename."""
     os.makedirs(download_dir, exist_ok=True)
 
@@ -119,25 +117,26 @@ def download_single(video_url: str, download_dir: str) -> str:
     }
 
     with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(video_url, download=True)
+        info = ydl.extract_info(video_url(video_id), download=True)
 
     if info is None:
-        msg = f"Failed to download {video_url}"
+        msg = f"Failed to download {video_id}"
         raise RuntimeError(msg)
 
-    title = info.get("title", "Unknown")
-    return os.path.join(download_dir, f"{title}.mp3")
+    # Use yt-dlp's filename resolution to handle title sanitization
+    filename = ydl.prepare_filename(info)
+    return str(Path(filename).with_suffix(".mp3"))
 
 
-def download_with_retry(video_url: str, download_dir: str) -> str:
+def download_with_retry(video_id: str, download_dir: str) -> str:
     """Download with retries for transient failures."""
-    last_error = RuntimeError(f"All {MAX_RETRIES} attempts failed for {video_url}")
+    last_error = RuntimeError(f"All {MAX_RETRIES} attempts failed for {video_id}")
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            return download_single(video_url, download_dir)
+            return download_single(video_id, download_dir)
         except Exception as e:
             last_error = e
             logger.warning(
-                "Attempt %d/%d failed for %s: %s", attempt, MAX_RETRIES, video_url, e
+                "Attempt %d/%d failed for %s: %s", attempt, MAX_RETRIES, video_id, e
             )
     raise last_error

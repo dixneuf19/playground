@@ -21,8 +21,6 @@ registry = DownloadRegistry(DOWNLOAD_DIR)
 
 URL_RE = re.compile(r"https?://\S+")
 
-YOUTUBE_VIDEO_URL = "https://www.youtube.com/watch?v="
-
 
 def is_allowed(user_id: int) -> bool:
     return not TELEGRAM_ALLOWED_USERS or user_id in TELEGRAM_ALLOWED_USERS
@@ -43,6 +41,7 @@ async def handle_message(update: Update, _context: object) -> None:
         return
     url = url_match.group(0)
 
+    logger.info("Received URL: %s", url)
     reply = await message.reply_text("Extracting info...")
 
     try:
@@ -53,8 +52,11 @@ async def handle_message(update: Update, _context: object) -> None:
         return
 
     if not tracks:
+        logger.info("No tracks found for %s", url)
         await reply.edit_text("No tracks found at this URL.")
         return
+
+    logger.info("Found %d track(s) for %s", len(tracks), url)
 
     # Filter out already downloaded tracks
     new_tracks = []
@@ -92,20 +94,29 @@ async def handle_message(update: Update, _context: object) -> None:
             parse_mode="Markdown",
         )
         try:
-            video_url = YOUTUBE_VIDEO_URL + track.video_id
-            filename = download_with_retry(video_url, DOWNLOAD_DIR)
+            logger.info("Downloading %s (%s)", track.title, track.video_id)
+            filename = download_with_retry(track.video_id, DOWNLOAD_DIR)
             registry.register(track.video_id, filename, track.title)
+            logger.info("Saved %s", filename)
             done.append(track.title)
         except Exception:
             logger.exception("Download failed for %s (%s)", track.title, track.video_id)
             failed.append(track.title)
 
-    parts = []
-    if done:
-        parts.append(f"Done ({len(done)}/{total_new})")
-    if failed:
-        parts.append(f"Failed ({len(failed)}): " + ", ".join(failed))
-    await reply.edit_text("\n".join(parts))
+    if is_playlist:
+        parts = []
+        if done:
+            parts.append(f"Done ({len(done)}/{total_new})")
+        if failed:
+            parts.append(f"Failed ({len(failed)}): " + ", ".join(failed))
+        await reply.edit_text("\n".join(parts))
+    else:
+        if done:
+            await reply.edit_text(
+                f"Done - _{new_tracks[0].title}_", parse_mode="Markdown"
+            )
+        else:
+            await reply.edit_text(f"Failed - {new_tracks[0].title}")
 
 
 def main() -> None:
