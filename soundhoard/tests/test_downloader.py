@@ -1,7 +1,12 @@
 import json
 from pathlib import Path
 
-from soundhoard.downloader import DownloadRegistry
+from soundhoard.downloader import DownloadRegistry, video_url
+
+
+class TestVideoUrl:
+    def test_video_url(self) -> None:
+        assert video_url("dQw4w9WgXcQ") == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 
 
 class TestDownloadRegistry:
