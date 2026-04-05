@@ -109,7 +109,10 @@ def download_single(video_url: str, download_dir: str) -> str:
         ],
         "writethumbnail": True,
         "outtmpl": os.path.join(download_dir, "%(title)s.%(ext)s"),
-        "parse_metadata": ["%(uploader)s:%(artist)s"],
+        "parse_metadata": [
+            "%(uploader)s:%(artist)s",
+            "%(uploader)s:%(album)s",
+        ],
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
