@@ -1,15 +1,10 @@
-import hashlib
 import logging
 
-import httpx
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters
 
 from .config import (
     DOWNLOAD_DIR,
-    NAVIDROME_PASSWORD,
-    NAVIDROME_URL,
-    NAVIDROME_USER,
     TELEGRAM_ALLOWED_USERS,
     TELEGRAM_BOT_TOKEN,
 )
@@ -26,30 +21,6 @@ registry = DownloadRegistry(DOWNLOAD_DIR)
 
 def is_allowed(user_id: int) -> bool:
     return not TELEGRAM_ALLOWED_USERS or user_id in TELEGRAM_ALLOWED_USERS
-
-
-async def trigger_navidrome_scan() -> None:
-    if not NAVIDROME_URL:
-        return
-    try:
-        # Subsonic API uses MD5 token auth
-        import secrets
-
-        salt = secrets.token_hex(8)
-        token = hashlib.md5((NAVIDROME_PASSWORD + salt).encode()).hexdigest()
-        params = {
-            "u": NAVIDROME_USER,
-            "t": token,
-            "s": salt,
-            "v": "1.16.1",
-            "c": "soundhoard",
-        }
-        url = f"{NAVIDROME_URL}/rest/startScan"
-        async with httpx.AsyncClient() as client:
-            await client.get(url, params=params)
-        logger.info("Triggered Navidrome rescan")
-    except Exception:
-        logger.exception("Failed to trigger Navidrome rescan")
 
 
 async def handle_message(update: Update, _context: object) -> None:
@@ -78,7 +49,6 @@ async def handle_message(update: Update, _context: object) -> None:
         filename, title = download_audio(url, DOWNLOAD_DIR)
         registry.register(video_id, filename, title)
         await reply.edit_text(f"Done: {title}")
-        await trigger_navidrome_scan()
     except Exception as e:
         logger.exception("Download failed for %s", url)
         await reply.edit_text(f"Failed: {e}")
