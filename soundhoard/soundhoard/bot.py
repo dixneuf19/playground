@@ -9,7 +9,7 @@ from .config import (
     TELEGRAM_ALLOWED_USERS,
     TELEGRAM_BOT_TOKEN,
 )
-from .downloader import DownloadRegistry, download_audio, extract_info
+from .downloader import DownloadRegistry, download_with_retry, extract_info
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 registry = DownloadRegistry(DOWNLOAD_DIR)
 
 URL_RE = re.compile(r"https?://\S+")
+
+YOUTUBE_VIDEO_URL = "https://www.youtube.com/watch?v="
 
 
 def is_allowed(user_id: int) -> bool:
@@ -64,23 +66,30 @@ async def handle_message(update: Update, _context: object) -> None:
         else:
             new_tracks.append(track)
 
+    # Summary of what was found
+    total_found = len(tracks)
+    total_new = len(new_tracks)
+    total_skipped = len(skipped)
+
     if not new_tracks:
-        titles = ", ".join(skipped)
-        await reply.edit_text(f"Already in library: {titles}")
+        await reply.edit_text(f"Found {total_found} track(s), all already in library.")
         return
 
-    if skipped:
-        await reply.edit_text(
-            f"Downloading {len(new_tracks)} track(s) ({len(skipped)} already in library)..."
-        )
-    else:
-        await reply.edit_text(f"Downloading {len(new_tracks)} track(s)...")
+    skip_info = f", {total_skipped} already in library" if total_skipped else ""
+    await reply.edit_text(
+        f"Found {total_found} track(s){skip_info}. Downloading {total_new}..."
+    )
 
     done = []
     failed = []
-    for track in new_tracks:
+    for i, track in enumerate(new_tracks, 1):
+        await reply.edit_text(
+            f"[{i}/{total_new}] Downloading - _{track.title}_",
+            parse_mode="Markdown",
+        )
         try:
-            filename = download_audio(url, DOWNLOAD_DIR, video_id=track.video_id)
+            video_url = YOUTUBE_VIDEO_URL + track.video_id
+            filename = download_with_retry(video_url, DOWNLOAD_DIR)
             registry.register(track.video_id, filename, track.title)
             done.append(track.title)
         except Exception:
@@ -89,9 +98,9 @@ async def handle_message(update: Update, _context: object) -> None:
 
     parts = []
     if done:
-        parts.append("Done: " + ", ".join(done))
+        parts.append(f"Done ({len(done)}/{total_new})")
     if failed:
-        parts.append("Failed: " + ", ".join(failed))
+        parts.append(f"Failed ({len(failed)}): " + ", ".join(failed))
     await reply.edit_text("\n".join(parts))
 
 
