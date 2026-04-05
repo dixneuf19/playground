@@ -9,6 +9,8 @@ import yt_dlp
 
 logger = logging.getLogger(__name__)
 
+MAX_RETRIES = 2
+
 
 @dataclass
 class TrackInfo:
@@ -49,9 +51,14 @@ class DownloadRegistry:
 
 
 def extract_info(url: str) -> list[TrackInfo]:
-    """Extract video info without downloading. Supports playlists."""
+    """Extract video info without downloading. Supports playlists.
+
+    Uses flat extraction for speed — only fetches video IDs and titles
+    from the playlist page without resolving each video individually.
+    """
     opts = {
-        "extract_flat": False,
+        "extract_flat": "in_playlist",
+        "ignoreerrors": True,
         "quiet": True,
         "no_warnings": True,
     }
@@ -61,24 +68,30 @@ def extract_info(url: str) -> list[TrackInfo]:
     if info is None:
         return []
 
-    entries = info.get("entries", [info])
+    # Single video: no "entries" key
+    if "entries" not in info:
+        video_id = info.get("id")
+        if not video_id:
+            return []
+        return [
+            TrackInfo(
+                video_id=video_id, title=info.get("title", "Unknown"), filename=""
+            )
+        ]
+
     return [
         TrackInfo(
             video_id=entry["id"],
             title=entry.get("title", "Unknown"),
-            filename="",  # filled after download
+            filename="",
         )
-        for entry in entries
-        if entry is not None
+        for entry in info["entries"]
+        if entry is not None and entry.get("id")
     ]
 
 
-def download_audio(url: str, download_dir: str, video_id: str | None = None) -> str:
-    """Download audio from URL. Returns the output filename.
-
-    If video_id is provided, only download that specific video (useful for
-    skipping already-downloaded entries in a playlist).
-    """
+def download_single(video_url: str, download_dir: str) -> str:
+    """Download a single video's audio. Returns the output filename."""
     os.makedirs(download_dir, exist_ok=True)
 
     opts: dict[str, Any] = {
@@ -97,28 +110,31 @@ def download_audio(url: str, download_dir: str, video_id: str | None = None) -> 
         "writethumbnail": True,
         "outtmpl": os.path.join(download_dir, "%(title)s.%(ext)s"),
         "parse_metadata": ["%(uploader)s:%(artist)s"],
+        "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
     }
 
-    if video_id:
-        opts["match_filter"] = lambda info_dict: (
-            None if info_dict.get("id") == video_id else "Skipping"
-        )
-
     with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=True)
+        info = ydl.extract_info(video_url, download=True)
 
     if info is None:
-        msg = f"Failed to download {url}"
+        msg = f"Failed to download {video_url}"
         raise RuntimeError(msg)
 
-    # For single video, info is the video dict; for filtered playlist, find our entry
-    if info.get("id") == video_id or video_id is None:
-        title = info.get("title", "Unknown")
-    else:
-        entries = info.get("entries", [])
-        downloaded = [e for e in entries if e is not None and e.get("id") == video_id]
-        title = downloaded[0].get("title", "Unknown") if downloaded else "Unknown"
-
+    title = info.get("title", "Unknown")
     return os.path.join(download_dir, f"{title}.mp3")
+
+
+def download_with_retry(video_url: str, download_dir: str) -> str:
+    """Download with retries for transient failures."""
+    last_error = RuntimeError(f"All {MAX_RETRIES} attempts failed for {video_url}")
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            return download_single(video_url, download_dir)
+        except Exception as e:
+            last_error = e
+            logger.warning(
+                "Attempt %d/%d failed for %s: %s", attempt, MAX_RETRIES, video_url, e
+            )
+    raise last_error
