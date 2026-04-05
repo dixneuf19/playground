@@ -1,21 +1,20 @@
 import json
 import logging
 import os
-import re
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import yt_dlp
 
 logger = logging.getLogger(__name__)
 
-YOUTUBE_URL_RE = re.compile(
-    r"(?:https?://)?(?:www\.|m\.|music\.)?(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/)([\w-]{11})"
-)
 
-
-def extract_video_id(url: str) -> str | None:
-    m = YOUTUBE_URL_RE.search(url)
-    return m.group(1) if m else None
+@dataclass
+class TrackInfo:
+    video_id: str
+    title: str
+    filename: str
 
 
 class DownloadRegistry:
@@ -49,18 +48,40 @@ class DownloadRegistry:
         self._save()
 
 
-def download_audio(url: str, download_dir: str) -> tuple[str, str]:
-    """Download audio from URL. Returns (filename, title)."""
+def extract_info(url: str) -> list[TrackInfo]:
+    """Extract video info without downloading. Supports playlists."""
+    opts = {
+        "extract_flat": False,
+        "quiet": True,
+        "no_warnings": True,
+    }
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+
+    if info is None:
+        return []
+
+    entries = info.get("entries", [info])
+    return [
+        TrackInfo(
+            video_id=entry["id"],
+            title=entry.get("title", "Unknown"),
+            filename="",  # filled after download
+        )
+        for entry in entries
+        if entry is not None
+    ]
+
+
+def download_audio(url: str, download_dir: str, video_id: str | None = None) -> str:
+    """Download audio from URL. Returns the output filename.
+
+    If video_id is provided, only download that specific video (useful for
+    skipping already-downloaded entries in a playlist).
+    """
     os.makedirs(download_dir, exist_ok=True)
 
-    info: dict = {}
-
-    def _progress_hook(d: dict) -> None:
-        nonlocal info
-        if d["status"] == "finished":
-            info = d.get("info_dict", {})
-
-    opts = {
+    opts: dict[str, Any] = {
         "format": "bestaudio/best",
         "postprocessors": [
             {
@@ -76,15 +97,28 @@ def download_audio(url: str, download_dir: str) -> tuple[str, str]:
         "writethumbnail": True,
         "outtmpl": os.path.join(download_dir, "%(title)s.%(ext)s"),
         "parse_metadata": ["%(uploader)s:%(artist)s"],
-        "progress_hooks": [_progress_hook],
         "quiet": True,
         "no_warnings": True,
     }
 
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        ydl.download([url])
+    if video_id:
+        opts["match_filter"] = lambda info_dict: (
+            None if info_dict.get("id") == video_id else "Skipping"
+        )
 
-    title = info.get("title", "Unknown")
-    # After postprocessing the extension is mp3
-    filename = os.path.join(download_dir, f"{title}.mp3")
-    return filename, title
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+
+    if info is None:
+        msg = f"Failed to download {url}"
+        raise RuntimeError(msg)
+
+    # For single video, info is the video dict; for filtered playlist, find our entry
+    if info.get("id") == video_id or video_id is None:
+        title = info.get("title", "Unknown")
+    else:
+        entries = info.get("entries", [])
+        downloaded = [e for e in entries if e is not None and e.get("id") == video_id]
+        title = downloaded[0].get("title", "Unknown") if downloaded else "Unknown"
+
+    return os.path.join(download_dir, f"{title}.mp3")

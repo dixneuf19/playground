@@ -1,40 +1,7 @@
 import json
 from pathlib import Path
 
-import pytest
-
-from soundhoard.downloader import DownloadRegistry, extract_video_id
-
-
-class TestExtractVideoId:
-    @pytest.mark.parametrize(
-        ("url", "expected"),
-        [
-            ("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "dQw4w9WgXcQ"),
-            ("https://youtu.be/dQw4w9WgXcQ", "dQw4w9WgXcQ"),
-            ("https://m.youtube.com/watch?v=dQw4w9WgXcQ", "dQw4w9WgXcQ"),
-            ("https://music.youtube.com/watch?v=dQw4w9WgXcQ", "dQw4w9WgXcQ"),
-            ("https://youtube.com/shorts/dQw4w9WgXcQ", "dQw4w9WgXcQ"),
-            ("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLfoo", "dQw4w9WgXcQ"),
-            ("check this out https://youtu.be/dQw4w9WgXcQ cool right?", "dQw4w9WgXcQ"),
-            ("http://youtube.com/watch?v=abc-_123DEf", "abc-_123DEf"),
-        ],
-    )
-    def test_valid_urls(self, url: str, expected: str) -> None:
-        assert extract_video_id(url) == expected
-
-    @pytest.mark.parametrize(
-        "url",
-        [
-            "https://www.google.com",
-            "not a url",
-            "https://vimeo.com/12345",
-            "https://youtube.com/channel/UCxyz",
-            "",
-        ],
-    )
-    def test_invalid_urls(self, url: str) -> None:
-        assert extract_video_id(url) is None
+from soundhoard.downloader import DownloadRegistry
 
 
 class TestDownloadRegistry:
@@ -84,3 +51,28 @@ class TestDownloadRegistry:
         data = json.loads((tmp_path / "downloads.json").read_text())
         assert data["abc123"]["title"] == "My Song"
         assert data["abc123"]["filename"] == str(fake_file)
+
+    def test_stale_entry_cleans_up_json(self, tmp_path: Path) -> None:
+        registry = DownloadRegistry(str(tmp_path))
+        registry.register("abc123", "/nonexistent/song.mp3", "My Song")
+
+        # Trigger stale cleanup
+        registry.check("abc123")
+
+        # Verify it's gone from the persisted file too
+        data = json.loads((tmp_path / "downloads.json").read_text())
+        assert "abc123" not in data
+
+    def test_multiple_entries(self, tmp_path: Path) -> None:
+        registry = DownloadRegistry(str(tmp_path))
+
+        file_a = tmp_path / "a.mp3"
+        file_b = tmp_path / "b.mp3"
+        file_a.touch()
+        file_b.touch()
+
+        registry.register("id_a", str(file_a), "Song A")
+        registry.register("id_b", str(file_b), "Song B")
+
+        assert registry.check("id_a") == "Song A"
+        assert registry.check("id_b") == "Song B"

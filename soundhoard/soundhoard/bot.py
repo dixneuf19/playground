@@ -1,4 +1,5 @@
 import logging
+import re
 
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters
@@ -8,7 +9,7 @@ from .config import (
     TELEGRAM_ALLOWED_USERS,
     TELEGRAM_BOT_TOKEN,
 )
-from .downloader import DownloadRegistry, download_audio, extract_video_id
+from .downloader import DownloadRegistry, download_audio, extract_info
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -17,6 +18,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 registry = DownloadRegistry(DOWNLOAD_DIR)
+
+URL_RE = re.compile(r"https?://\S+")
 
 
 def is_allowed(user_id: int) -> bool:
@@ -32,26 +35,64 @@ async def handle_message(update: Update, _context: object) -> None:
         await message.reply_text("You are not authorized to use this bot.")
         return
 
-    video_id = extract_video_id(message.text)
-    if not video_id:
-        return  # Silently ignore non-YouTube messages
-
-    # Idempotency check
-    existing_title = registry.check(video_id)
-    if existing_title:
-        await message.reply_text(f"Already in library: {existing_title}")
+    # Extract first URL from message
+    url_match = URL_RE.search(message.text)
+    if not url_match:
         return
+    url = url_match.group(0)
 
-    url = message.text.strip()
-    reply = await message.reply_text("Downloading...")
+    reply = await message.reply_text("Extracting info...")
 
     try:
-        filename, title = download_audio(url, DOWNLOAD_DIR)
-        registry.register(video_id, filename, title)
-        await reply.edit_text(f"Done: {title}")
+        tracks = extract_info(url)
     except Exception as e:
-        logger.exception("Download failed for %s", url)
-        await reply.edit_text(f"Failed: {e}")
+        logger.exception("Failed to extract info from %s", url)
+        await reply.edit_text(f"Not a supported URL: {e}")
+        return
+
+    if not tracks:
+        await reply.edit_text("No tracks found at this URL.")
+        return
+
+    # Filter out already downloaded tracks
+    new_tracks = []
+    skipped = []
+    for track in tracks:
+        existing = registry.check(track.video_id)
+        if existing:
+            skipped.append(existing)
+        else:
+            new_tracks.append(track)
+
+    if not new_tracks:
+        titles = ", ".join(skipped)
+        await reply.edit_text(f"Already in library: {titles}")
+        return
+
+    if skipped:
+        await reply.edit_text(
+            f"Downloading {len(new_tracks)} track(s) ({len(skipped)} already in library)..."
+        )
+    else:
+        await reply.edit_text(f"Downloading {len(new_tracks)} track(s)...")
+
+    done = []
+    failed = []
+    for track in new_tracks:
+        try:
+            filename = download_audio(url, DOWNLOAD_DIR, video_id=track.video_id)
+            registry.register(track.video_id, filename, track.title)
+            done.append(track.title)
+        except Exception:
+            logger.exception("Download failed for %s (%s)", track.title, track.video_id)
+            failed.append(track.title)
+
+    parts = []
+    if done:
+        parts.append("Done: " + ", ".join(done))
+    if failed:
+        parts.append("Failed: " + ", ".join(failed))
+    await reply.edit_text("\n".join(parts))
 
 
 def main() -> None:
