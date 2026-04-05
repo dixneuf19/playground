@@ -1,6 +1,5 @@
 import hashlib
 import logging
-import urllib.parse
 
 import httpx
 from telegram import Update
@@ -53,12 +52,12 @@ async def trigger_navidrome_scan() -> None:
         logger.exception("Failed to trigger Navidrome rescan")
 
 
-async def handle_message(update: Update, context) -> None:
+async def handle_message(update: Update, _context: object) -> None:
     message = update.message
     if not message or not message.text:
         return
 
-    if not is_allowed(message.from_user.id):
+    if not message.from_user or not is_allowed(message.from_user.id):
         await message.reply_text("You are not authorized to use this bot.")
         return
 

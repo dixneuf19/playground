@@ -2,7 +2,7 @@
 name = "soundhoard"
 version = "0.1.0"
 description = "Telegram bot that downloads YouTube audio to a Navidrome library"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
     "python-telegram-bot>=21.0",
     "yt-dlp>=2024.0",
@@ -11,3 +11,18 @@ dependencies = [
 
 [project.scripts]
 soundhoard = "soundhoard.bot:main"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.11",
+    "ty>=0.0.1a7",
+    "pytest>=8.3",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "C4", "UP", "N", "W", "SIM", "ARG", "PIE", "T20", "RUF"]
+ignore = ["E501"]

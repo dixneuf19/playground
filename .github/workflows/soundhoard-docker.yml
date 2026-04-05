@@ -6,12 +6,31 @@ on:
     paths:
       - "soundhoard/**"
       - ".github/workflows/soundhoard-docker.yml"
+  pull_request:
+    paths:
+      - "soundhoard/**"
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/soundhoard
 
+defaults:
+  run:
+    working-directory: soundhoard
+
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv python install
+      - run: uv sync --all-extras --dev
+      - run: make check-format
+      - run: make typecheck
+
   build-and-push:
+    needs: check
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -25,14 +44,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: docker/setup-qemu-action@v3
+
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/build-push-action@v6
         with:
           context: soundhoard
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: |
-            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:main
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
