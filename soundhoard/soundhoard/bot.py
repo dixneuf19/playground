@@ -21,8 +21,6 @@ registry = DownloadRegistry(DOWNLOAD_DIR)
 
 URL_RE = re.compile(r"https?://\S+")
 
-YOUTUBE_VIDEO_URL = "https://www.youtube.com/watch?v="
-
 
 def is_allowed(user_id: int) -> bool:
     return not TELEGRAM_ALLOWED_USERS or user_id in TELEGRAM_ALLOWED_USERS
@@ -96,9 +94,8 @@ async def handle_message(update: Update, _context: object) -> None:
             parse_mode="Markdown",
         )
         try:
-            video_url = YOUTUBE_VIDEO_URL + track.video_id
             logger.info("Downloading %s (%s)", track.title, track.video_id)
-            filename = download_with_retry(video_url, DOWNLOAD_DIR)
+            filename = download_with_retry(track.video_id, DOWNLOAD_DIR)
             registry.register(track.video_id, filename, track.title)
             logger.info("Saved %s", filename)
             done.append(track.title)
@@ -114,11 +111,12 @@ async def handle_message(update: Update, _context: object) -> None:
             parts.append(f"Failed ({len(failed)}): " + ", ".join(failed))
         await reply.edit_text("\n".join(parts))
     else:
-        track = new_tracks[0]
         if done:
-            await reply.edit_text(f"Done - _{track.title}_", parse_mode="Markdown")
+            await reply.edit_text(
+                f"Done - _{new_tracks[0].title}_", parse_mode="Markdown"
+            )
         else:
-            await reply.edit_text(f"Failed - {track.title}")
+            await reply.edit_text(f"Failed - {new_tracks[0].title}")
 
 
 def main() -> None:
