@@ -25,4 +25,4 @@ RUN apt-get update && \
 COPY --from=builder /app /app
 ENV PATH="/app/.venv/bin:$PATH"
 
-CMD ["soundhoard"]
+CMD ["python", "-m", "soundhoard"]
