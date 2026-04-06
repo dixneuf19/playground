@@ -26,3 +26,7 @@ target-version = "py313"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "C4", "UP", "N", "W", "SIM", "ARG", "PIE", "T20", "RUF"]
 ignore = ["E501"]
+
+[tool.pytest.ini_options]
+markers = ["integration: slow tests that require network (download from YouTube)"]
+addopts = "-m 'not integration'"
