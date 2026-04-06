@@ -3,6 +3,7 @@ import re
 
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters
+from telegram.helpers import escape_markdown
 
 from .config import (
     DOWNLOAD_DIR,
@@ -89,8 +90,9 @@ async def handle_message(update: Update, _context: object) -> None:
     failed = []
     for i, track in enumerate(new_tracks, 1):
         progress = f"[{i}/{total_new}] " if is_playlist else ""
+        escaped_title = escape_markdown(track.title)
         await reply.edit_text(
-            f"{progress}Downloading - _{track.title}_",
+            f"{progress}Downloading - _{escaped_title}_",
             parse_mode="Markdown",
         )
         try:
@@ -112,9 +114,8 @@ async def handle_message(update: Update, _context: object) -> None:
         await reply.edit_text("\n".join(parts))
     else:
         if done:
-            await reply.edit_text(
-                f"Done - _{new_tracks[0].title}_", parse_mode="Markdown"
-            )
+            escaped = escape_markdown(new_tracks[0].title)
+            await reply.edit_text(f"Done - _{escaped}_", parse_mode="Markdown")
         else:
             await reply.edit_text(f"Failed - {new_tracks[0].title}")
 

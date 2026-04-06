@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 
 import yt_dlp
+from mutagen.id3 import TALB
+from mutagen.mp3 import MP3
 
 logger = logging.getLogger(__name__)
 
@@ -118,13 +120,11 @@ def download_single(video_id: str, download_dir: str) -> str:
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(video_url(video_id), download=True)
 
-    if info is None:
-        msg = f"Failed to download {video_id}"
-        raise RuntimeError(msg)
+        if info is None:
+            msg = f"Failed to download {video_id}"
+            raise RuntimeError(msg)
 
-    # Use yt-dlp's filename resolution to handle title sanitization
-    filename = ydl.prepare_filename(info)
-    mp3_path = str(Path(filename).with_suffix(".mp3"))
+        mp3_path = str(Path(ydl.prepare_filename(info)).with_suffix(".mp3"))
 
     # FFmpegMetadata doesn't reliably write the album tag from parse_metadata,
     # so we set it directly via mutagen
@@ -136,16 +136,12 @@ def download_single(video_id: str, download_dir: str) -> str:
 
 
 def _set_album_tag(filepath: str, album: str) -> None:
-    from mutagen.id3 import TALB
-    from mutagen.mp3 import MP3
-
     m = MP3(filepath)
     if m.tags is None:
         m.add_tags()
-    tags = m.tags
-    assert tags is not None
-    tags.add(TALB(encoding=3, text=album))
-    m.save()
+    if m.tags is not None:
+        m.tags.add(TALB(encoding=3, text=album))
+        m.save()
 
 
 def download_with_retry(video_id: str, download_dir: str) -> str:
