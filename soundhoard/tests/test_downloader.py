@@ -1,7 +1,11 @@
 import json
+import os
 from pathlib import Path
 
-from soundhoard.downloader import DownloadRegistry, video_url
+import pytest
+from mutagen.mp3 import MP3
+
+from soundhoard.downloader import DownloadRegistry, download_single, video_url
 
 
 class TestVideoUrl:
@@ -81,3 +85,32 @@ class TestDownloadRegistry:
 
         assert registry.check("id_a") == "Song A"
         assert registry.check("id_b") == "Song B"
+
+
+@pytest.mark.integration
+class TestDownloadSingle:
+    """Integration tests that download from YouTube. Slow, requires network.
+
+    Run with: uv run pytest -m integration
+    """
+
+    def test_download_and_metadata(self, tmp_path: Path) -> None:
+        # Rick Astley - Never Gonna Give You Up
+        filename = download_single("dQw4w9WgXcQ", str(tmp_path))
+
+        # File exists and is an mp3
+        assert Path(filename).exists()
+        assert filename.endswith(".mp3")
+
+        # No leftover files (only mp3 + no webm/webp/json)
+        files = os.listdir(tmp_path)
+        assert len(files) == 1
+        assert files[0].endswith(".mp3")
+
+        # Metadata is set
+        m = MP3(filename)
+        assert m.tags is not None
+        assert m.tags.get("TIT2") is not None  # title
+        assert m.tags.get("TPE1") is not None  # artist
+        assert m.tags.get("TALB") is not None  # album (from uploader)
+        assert any("PIC" in k for k in m.tags)  # cover art embedded

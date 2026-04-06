@@ -391,6 +391,7 @@ name = "soundhoard"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "mutagen" },
     { name = "python-telegram-bot" },
     { name = "yt-dlp", extra = ["default"] },
 ]
@@ -404,6 +405,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "mutagen", specifier = ">=1.47.0" },
     { name = "python-telegram-bot", specifier = ">=21.0" },
     { name = "yt-dlp", extras = ["default"], specifier = ">=2024.0" },
 ]
