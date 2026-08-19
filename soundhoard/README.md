@@ -25,6 +25,13 @@ Duplicate URLs are detected and skipped (idempotent). If the file was deleted fr
 | `NAVIDROME_USER` | No | Navidrome admin username |
 | `NAVIDROME_PASSWORD` | No | Navidrome admin password |
 
+## yt-dlp version
+
+`yt-dlp` is pinned to a nightly build, not a stable release. YouTube regularly breaks
+player clients, and fixes land on master months before the next stable tag. If downloads
+start failing with `HTTP Error 403: Forbidden`, bump the pin in `pyproject.toml` to the
+latest nightly on PyPI and re-run `uv lock`.
+
 ## Run locally
 
 ```bash

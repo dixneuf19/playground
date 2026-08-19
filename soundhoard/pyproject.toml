@@ -6,7 +6,9 @@ requires-python = ">=3.13"
 dependencies = [
     "mutagen>=1.47.0",
     "python-telegram-bot>=21.0",
-    "yt-dlp[default]>=2024.0",
+    # Nightly: no stable release yet ships the `visionos` player client, and the
+    # `android_vr` client that stable falls back to gets HTTP 403 from YouTube.
+    "yt-dlp[default]>=2026.8.18.122307.dev0",
 ]
 
 [project.scripts]
