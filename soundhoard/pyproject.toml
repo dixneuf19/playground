@@ -1,7 +1,7 @@
 [project]
 name = "soundhoard"
 version = "0.1.0"
-description = "Telegram bot that downloads YouTube audio to a Navidrome library"
+description = "Telegram bot that downloads YouTube and SoundCloud audio to a Navidrome library"
 requires-python = ">=3.13"
 dependencies = [
     "mutagen>=1.47.0",
@@ -30,5 +30,5 @@ select = ["E", "F", "I", "B", "C4", "UP", "N", "W", "SIM", "ARG", "PIE", "T20", 
 ignore = ["E501"]
 
 [tool.pytest.ini_options]
-markers = ["integration: slow tests that require network (download from YouTube)"]
+markers = ["integration: slow tests that require network (download from YouTube/SoundCloud)"]
 addopts = "-m 'not integration'"

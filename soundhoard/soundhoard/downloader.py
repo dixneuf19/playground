@@ -16,7 +16,25 @@ MAX_RETRIES = 2
 
 @dataclass
 class TrackInfo:
-    video_id: str
+    source: str
+    track_id: str
+    url: str
+    title: str | None
+
+    @property
+    def key(self) -> str:
+        """Registry key. Namespaced because track IDs are only unique per source."""
+        return f"{self.source}:{self.track_id}"
+
+    @property
+    def label(self) -> str:
+        """What to show the user before the real title is known."""
+        return self.title or self.url
+
+
+@dataclass
+class DownloadedTrack:
+    path: str
     title: str
 
 
@@ -27,35 +45,70 @@ class DownloadRegistry:
         self._load()
 
     def _load(self) -> None:
-        if self.path.exists():
-            self._data = json.loads(self.path.read_text())
+        if not self.path.exists():
+            return
+        self._data = json.loads(self.path.read_text())
+        if self._migrate_legacy_keys():
+            self._save()
+
+    def _migrate_legacy_keys(self) -> bool:
+        """Keys used to be bare YouTube video IDs, before other sources existed."""
+        legacy = [key for key in self._data if ":" not in key]
+        for key in legacy:
+            self._data[f"youtube:{key}"] = self._data.pop(key)
+        if legacy:
+            logger.info("Migrated %d legacy registry key(s)", len(legacy))
+        return bool(legacy)
 
     def _save(self) -> None:
         self.path.write_text(json.dumps(self._data, indent=2, ensure_ascii=False))
 
-    def check(self, video_id: str) -> str | None:
+    def check(self, key: str) -> str | None:
         """Return the title if already downloaded and file exists, else None."""
-        entry = self._data.get(video_id)
+        entry = self._data.get(key)
         if entry is None:
             return None
         if Path(entry["filename"]).exists():
             return entry["title"]
-        # File was deleted — remove stale entry
-        logger.info("File missing for %s, removing stale registry entry", video_id)
-        del self._data[video_id]
+        # File was deleted, remove stale entry
+        logger.info("File missing for %s, removing stale registry entry", key)
+        del self._data[key]
         self._save()
         return None
 
-    def register(self, video_id: str, filename: str, title: str) -> None:
-        self._data[video_id] = {"filename": filename, "title": title}
+    def register(self, key: str, filename: str, title: str) -> None:
+        self._data[key] = {"filename": filename, "title": title}
         self._save()
 
 
-def extract_info(url: str) -> list[TrackInfo]:
-    """Extract video info without downloading. Supports playlists.
+def _track_from_entry(entry: dict, fallback_url: str | None = None) -> TrackInfo | None:
+    """Build a TrackInfo from a yt-dlp info dict, flat or fully resolved.
 
-    Uses flat extraction for speed — only fetches video IDs and titles
-    from the playlist page without resolving each video individually.
+    Flat playlist entries carry the permalink in `url` and the source in
+    `ie_key`; fully resolved ones carry them in `webpage_url` and
+    `extractor_key`, with `url` holding an expiring media stream instead, hence
+    the ordering below. SoundCloud sets give no title in flat mode, so `title`
+    stays None until the track is actually downloaded.
+    """
+    track_id = entry.get("id")
+    url = entry.get("webpage_url") or entry.get("url") or fallback_url
+    if not track_id or not url:
+        return None
+
+    source = entry.get("ie_key") or entry.get("extractor_key") or entry.get("extractor")
+    return TrackInfo(
+        source=str(source).lower() if source else "unknown",
+        track_id=str(track_id),
+        url=url,
+        title=entry.get("title"),
+    )
+
+
+def extract_info(url: str) -> list[TrackInfo]:
+    """Extract track info without downloading. Supports playlists and sets.
+
+    Uses flat extraction for speed: only fetches IDs and permalinks from the
+    playlist page without resolving each track individually.
     """
     opts = {
         "extract_flat": "in_playlist",
@@ -69,29 +122,19 @@ def extract_info(url: str) -> list[TrackInfo]:
     if info is None:
         return []
 
-    # Single video: no "entries" key
+    # Single track: no "entries" key
     if "entries" not in info:
-        video_id = info.get("id")
-        if not video_id:
-            return []
-        return [TrackInfo(video_id=video_id, title=info.get("title", "Unknown"))]
+        track = _track_from_entry(info, fallback_url=url)
+        return [track] if track else []
 
-    return [
-        TrackInfo(
-            video_id=entry["id"],
-            title=entry.get("title", "Unknown"),
-        )
-        for entry in info["entries"]
-        if entry is not None and entry.get("id")
+    tracks = [
+        _track_from_entry(entry) for entry in info["entries"] if entry is not None
     ]
+    return [track for track in tracks if track is not None]
 
 
-def video_url(video_id: str) -> str:
-    return f"https://www.youtube.com/watch?v={video_id}"
-
-
-def download_single(video_id: str, download_dir: str) -> str:
-    """Download a single video's audio. Returns the output filename."""
+def download_single(url: str, download_dir: str) -> DownloadedTrack:
+    """Download a single track's audio. Returns the output file and its title."""
     os.makedirs(download_dir, exist_ok=True)
 
     opts: dict[str, Any] = {
@@ -104,6 +147,7 @@ def download_single(video_id: str, download_dir: str) -> str:
             },
             {"key": "FFmpegMetadata"},
             {"key": "EmbedThumbnail"},
+            # No-ops on sources SponsorBlock doesn't cover, such as SoundCloud
             {"key": "SponsorBlock", "categories": ["sponsor"]},
             {"key": "ModifyChapters", "remove_sponsor_segments": ["sponsor"]},
         ],
@@ -115,13 +159,16 @@ def download_single(video_id: str, download_dir: str) -> str:
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
+        # Fragmented (HLS) downloads, as SoundCloud serves, print a progress
+        # bar even under `quiet`
+        "noprogress": True,
     }
 
     with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(video_url(video_id), download=True)
+        info = ydl.extract_info(url, download=True)
 
         if info is None:
-            msg = f"Failed to download {video_id}"
+            msg = f"Failed to download {url}"
             raise RuntimeError(msg)
 
         mp3_path = str(Path(ydl.prepare_filename(info)).with_suffix(".mp3"))
@@ -132,7 +179,7 @@ def download_single(video_id: str, download_dir: str) -> str:
     if uploader:
         _set_album_tag(mp3_path, uploader)
 
-    return mp3_path
+    return DownloadedTrack(path=mp3_path, title=info.get("title") or "Unknown")
 
 
 def _set_album_tag(filepath: str, album: str) -> None:
@@ -144,15 +191,15 @@ def _set_album_tag(filepath: str, album: str) -> None:
         m.save()
 
 
-def download_with_retry(video_id: str, download_dir: str) -> str:
+def download_with_retry(url: str, download_dir: str) -> DownloadedTrack:
     """Download with retries for transient failures."""
-    last_error = RuntimeError(f"All {MAX_RETRIES} attempts failed for {video_id}")
+    last_error = RuntimeError(f"All {MAX_RETRIES} attempts failed for {url}")
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            return download_single(video_id, download_dir)
+            return download_single(url, download_dir)
         except Exception as e:
             last_error = e
             logger.warning(
-                "Attempt %d/%d failed for %s: %s", attempt, MAX_RETRIES, video_id, e
+                "Attempt %d/%d failed for %s: %s", attempt, MAX_RETRIES, url, e
             )
     raise last_error
