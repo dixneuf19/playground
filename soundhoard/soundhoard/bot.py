@@ -63,7 +63,7 @@ async def handle_message(update: Update, _context: object) -> None:
     new_tracks = []
     skipped = []
     for track in tracks:
-        existing = registry.check(track.video_id)
+        existing = registry.check(track.key)
         if existing:
             skipped.append(existing)
         else:
@@ -90,20 +90,20 @@ async def handle_message(update: Update, _context: object) -> None:
     failed = []
     for i, track in enumerate(new_tracks, 1):
         progress = f"[{i}/{total_new}] " if is_playlist else ""
-        escaped_title = escape_markdown(track.title)
+        escaped_label = escape_markdown(track.label)
         await reply.edit_text(
-            f"{progress}Downloading - _{escaped_title}_",
+            f"{progress}Downloading - _{escaped_label}_",
             parse_mode="Markdown",
         )
         try:
-            logger.info("Downloading %s (%s)", track.title, track.video_id)
-            filename = download_with_retry(track.video_id, DOWNLOAD_DIR)
-            registry.register(track.video_id, filename, track.title)
-            logger.info("Saved %s", filename)
-            done.append(track.title)
+            logger.info("Downloading %s (%s)", track.label, track.key)
+            downloaded = download_with_retry(track.url, DOWNLOAD_DIR)
+            registry.register(track.key, downloaded.path, downloaded.title)
+            logger.info("Saved %s", downloaded.path)
+            done.append(downloaded.title)
         except Exception:
-            logger.exception("Download failed for %s (%s)", track.title, track.video_id)
-            failed.append(track.title)
+            logger.exception("Download failed for %s (%s)", track.label, track.key)
+            failed.append(track.label)
 
     if is_playlist:
         parts = []
@@ -114,10 +114,10 @@ async def handle_message(update: Update, _context: object) -> None:
         await reply.edit_text("\n".join(parts))
     else:
         if done:
-            escaped = escape_markdown(new_tracks[0].title)
+            escaped = escape_markdown(done[0])
             await reply.edit_text(f"Done - _{escaped}_", parse_mode="Markdown")
         else:
-            await reply.edit_text(f"Failed - {new_tracks[0].title}")
+            await reply.edit_text(f"Failed - {new_tracks[0].label}")
 
 
 def main() -> None:
