@@ -6,6 +6,10 @@ on:
     paths:
       - "soundhoard/**"
       - ".github/workflows/soundhoard-docker.yml"
+  pull_request:
+    paths:
+      - "soundhoard/**"
+      - ".github/workflows/soundhoard-docker.yml"
 
 env:
   TARGET_PLATFORMS: linux/amd64,linux/arm64
@@ -29,6 +33,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=tag
+            type=ref,event=pr
             type=sha
 
       - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4
@@ -46,9 +51,9 @@ jobs:
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: soundhoard
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: ${{ env.TARGET_PLATFORMS }}
+          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || env.TARGET_PLATFORMS }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
