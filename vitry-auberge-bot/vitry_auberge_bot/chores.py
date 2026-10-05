@@ -16,6 +16,8 @@ class Chore:
     # Offsets from `start` at which to nag again while nobody has acknowledged
     reminders: tuple[timedelta, ...] = ()
     even_weeks_only: bool = False
+    # Offers a "Pas besoin" button, for bins that are not always worth taking out
+    skippable: bool = False
 
     def occurs_on(self, day: date) -> bool:
         if day.weekday() not in self.weekdays:
@@ -46,6 +48,7 @@ CHORES: tuple[Chore, ...] = (
         weekdays=frozenset({MON, FRI}),
         start=EVENING,
         reminders=every(2, until=4),
+        skippable=True,
     ),
     Chore(
         id="poubelle-jaune",
@@ -61,6 +64,7 @@ CHORES: tuple[Chore, ...] = (
         start=EVENING,
         reminders=every(2, until=4),
         even_weeks_only=True,
+        skippable=True,
     ),
     Chore(
         id="legumes",

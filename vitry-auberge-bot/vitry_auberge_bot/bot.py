@@ -40,8 +40,11 @@ tracker = Tracker()
 
 
 def done_keyboard(occurrence: Occurrence) -> InlineKeyboardMarkup:
-    data = f"done:{occurrence.chore.id}:{occurrence.day.isoformat()}"
-    return InlineKeyboardMarkup([[InlineKeyboardButton("✅ C'est fait", callback_data=data)]])
+    suffix = f"{occurrence.chore.id}:{occurrence.day.isoformat()}"
+    buttons = [InlineKeyboardButton("✅ C'est fait", callback_data=f"done:{suffix}")]
+    if occurrence.chore.skippable:
+        buttons.append(InlineKeyboardButton("🙅 Pas besoin", callback_data=f"skip:{suffix}"))
+    return InlineKeyboardMarkup([buttons])
 
 
 def display_name(user: User | None) -> str:
@@ -92,10 +95,12 @@ async def send_reminder(context: ContextTypes.DEFAULT_TYPE) -> None:
     await send_for(context, occurrence, f"{prefix} {chore.message}")
 
 
-async def mark_done(context: ContextTypes.DEFAULT_TYPE, occurrence: Occurrence, who: str) -> None:
-    if not tracker.acknowledge(occurrence, who):
+async def mark_done(
+    context: ContextTypes.DEFAULT_TYPE, occurrence: Occurrence, who: str, skipped: bool = False
+) -> None:
+    if not tracker.acknowledge(occurrence, who, skipped):
         return
-    logger.info("Chore %s done by %s", occurrence.chore.id, who)
+    logger.info("Chore %s %s by %s", occurrence.chore.id, "skipped" if skipped else "done", who)
     for message_id in occurrence.message_ids:
         try:
             await context.bot.edit_message_reply_markup(CHAT_ID, message_id, reply_markup=None)
@@ -103,7 +108,7 @@ async def mark_done(context: ContextTypes.DEFAULT_TYPE, occurrence: Occurrence, 
             logger.warning("Could not remove keyboard from message %d: %s", message_id, error)
     await context.bot.send_message(
         CHAT_ID,
-        f"Merci {html.escape(who)} 🙏",
+        f"Ok {html.escape(who)} 👌" if skipped else f"Merci {html.escape(who)} 🙏",
         parse_mode=ParseMode.HTML,
         reply_parameters=ReplyParameters(message_id=occurrence.message_ids[0], allow_sending_without_reply=True)
         if occurrence.message_ids
@@ -114,16 +119,18 @@ async def mark_done(context: ContextTypes.DEFAULT_TYPE, occurrence: Occurrence, 
 async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     assert query is not None and query.data is not None
-    _, chore_id, day = query.data.split(":")
+    action, chore_id, day = query.data.split(":")
     occurrence = tracker.find((chore_id, date.fromisoformat(day)))
     if occurrence is None:
         await query.answer("Ce rappel est expiré 🤷")
         return
     if occurrence.done:
-        await query.answer(f"Déjà fait par {occurrence.done_by} 👌")
+        await query.answer(
+            f"{occurrence.done_by} a dit pas besoin" if occurrence.skipped else f"Déjà fait par {occurrence.done_by}"
+        )
         return
-    await query.answer("Merci !")
-    await mark_done(context, occurrence, display_name(query.from_user))
+    await query.answer()
+    await mark_done(context, occurrence, display_name(query.from_user), skipped=action == "skip")
 
 
 async def on_reaction(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -193,7 +200,7 @@ def main() -> None:
     application.add_handler(CommandHandler(["help", "start"], show_help))
     application.add_handler(CommandHandler("chatid", show_chat_id))
     application.add_handler(CommandHandler("prochains", show_upcoming))
-    application.add_handler(CallbackQueryHandler(on_button, pattern=r"^done:"))
+    application.add_handler(CallbackQueryHandler(on_button, pattern=r"^(done|skip):"))
     application.add_handler(MessageReactionHandler(on_reaction, chat_id=CHAT_ID))
     application.add_handler(MessageHandler(group & filters.REPLY, on_reply))
 

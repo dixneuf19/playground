@@ -61,3 +61,7 @@ def test_in_progress_after_midnight_belongs_to_previous_day():
 
 def test_in_progress_vegetables_and_bin_overlap():
     assert {c.id for _, c in in_progress(at(MONDAY, 20, 30))} == {"legumes", "poubelle-marron"}
+
+
+def test_only_brown_bin_and_glass_can_be_skipped():
+    assert {chore_id for chore_id, chore in CHORES_BY_ID.items() if chore.skippable} == {"poubelle-marron", "verre"}

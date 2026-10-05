@@ -4,6 +4,8 @@ Telegram bot reminding the Vitry flatmates of their chores (bins, vegetables pic
 
 Each reminder comes with a "✅ C'est fait" button. Clicking it, reacting to the message or replying to it marks the chore as done. Until then, the bot keeps nagging at the times defined for the chore.
 
+The brown bin and glass also get a "🙅 Pas besoin" button, for the evenings when they are not worth taking out.
+
 ## Schedule
 
 All chores live in [`vitry_auberge_bot/chores.py`](vitry_auberge_bot/chores.py). Edit the file and rebuild to change them.

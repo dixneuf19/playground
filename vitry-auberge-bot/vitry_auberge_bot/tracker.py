@@ -12,6 +12,7 @@ class Occurrence:
     day: date
     message_ids: list[int] = field(default_factory=list)
     done_by: str | None = None
+    skipped: bool = False
 
     @property
     def key(self) -> OccurrenceKey:
@@ -46,11 +47,12 @@ class Tracker:
     def by_message(self, message_id: int) -> Occurrence | None:
         return self._by_message.get(message_id)
 
-    def acknowledge(self, occurrence: Occurrence, who: str) -> bool:
-        """Mark as done. Returns False if someone already did it."""
+    def acknowledge(self, occurrence: Occurrence, who: str, skipped: bool = False) -> bool:
+        """Mark as done, or as not needed this time. Returns False if someone already handled it."""
         if occurrence.done:
             return False
         occurrence.done_by = who
+        occurrence.skipped = skipped
         return True
 
     def _forget_before(self, day: date) -> None:

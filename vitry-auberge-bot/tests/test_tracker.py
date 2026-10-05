@@ -30,3 +30,11 @@ def test_old_occurrences_are_forgotten():
     tracker.get(BIN, date(2026, 10, 5))
     assert tracker.find(old.key) is None
     assert tracker.by_message(1) is None
+
+
+def test_skip_stops_reminders_like_done():
+    tracker = Tracker()
+    occurrence = tracker.get(BIN, date(2026, 10, 5))
+    assert tracker.acknowledge(occurrence, "Alice", skipped=True)
+    assert occurrence.done and occurrence.skipped
+    assert not tracker.acknowledge(occurrence, "Bob")
