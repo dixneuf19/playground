@@ -5,11 +5,13 @@ from zoneinfo import ZoneInfo
 TZ = ZoneInfo("Europe/Paris")
 
 MON, TUE, WED, THU, FRI, SAT, SUN = range(7)
+DAY_NAMES = ("lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim.")
 
 
 @dataclass(frozen=True)
 class Chore:
     id: str
+    label: str
     message: str
     weekdays: frozenset[int]
     start: time
@@ -44,6 +46,7 @@ EVENING = time(20, 0, tzinfo=TZ)
 CHORES: tuple[Chore, ...] = (
     Chore(
         id="poubelle-marron",
+        label="🟤 Poubelle marron",
         message="🟤 Ce soir on sort la <b>poubelle marron</b> (ordures ménagères) !",
         weekdays=frozenset({MON, FRI}),
         start=EVENING,
@@ -52,6 +55,7 @@ CHORES: tuple[Chore, ...] = (
     ),
     Chore(
         id="poubelle-jaune",
+        label="🟡 Poubelle jaune",
         message="🟡 Ce soir on sort la <b>poubelle jaune</b> (recyclables) !",
         weekdays=frozenset({WED}),
         start=EVENING,
@@ -59,6 +63,7 @@ CHORES: tuple[Chore, ...] = (
     ),
     Chore(
         id="verre",
+        label="🟢 Verre",
         message="🟢 Ce soir on sort le <b>verre</b> !",
         weekdays=frozenset({WED}),
         start=EVENING,
@@ -68,6 +73,7 @@ CHORES: tuple[Chore, ...] = (
     ),
     Chore(
         id="legumes",
+        label="🥕 Légumes du Rungis",
         message="🥕 Ce soir c'est la <b>récup des légumes du Rungis</b> à Bizet, entre 18h et 21h. Qui y va ?",
         weekdays=frozenset({MON}),
         start=time(17, 0, tzinfo=TZ),
@@ -75,6 +81,7 @@ CHORES: tuple[Chore, ...] = (
     ),
     Chore(
         id="menage",
+        label="🧹 Ménage hebdo",
         message="🧹 Est-ce que quelqu'un a fait le <b>ménage hebdo</b> ?",
         weekdays=frozenset({SUN}),
         start=time(19, 0, tzinfo=TZ),
@@ -103,3 +110,9 @@ def in_progress(now: datetime) -> list[tuple[date, Chore]]:
             if chore.occurs_on(day) and chore.start_at(day) < now < chore.end_at(day):
                 result.append((day, chore))
     return result
+
+
+def format_when(when: datetime) -> str:
+    """French short date, e.g. "lun. 05/10 20h" or "dim. 11/10 18h30"."""
+    hour = f"{when.hour}h{when.minute:02d}" if when.minute else f"{when.hour}h"
+    return f"{DAY_NAMES[when.weekday()]} {when:%d/%m} {hour}"

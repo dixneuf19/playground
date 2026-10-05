@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from vitry_auberge_bot.chores import CHORES_BY_ID, TZ, in_progress, upcoming
+from vitry_auberge_bot.chores import CHORES_BY_ID, TZ, format_when, in_progress, upcoming
 
 MONDAY = date(2026, 10, 5)
 WEDNESDAY_ODD_WEEK = date(2026, 10, 7)
@@ -65,3 +65,8 @@ def test_in_progress_vegetables_and_bin_overlap():
 
 def test_only_brown_bin_and_glass_can_be_skipped():
     assert {chore_id for chore_id, chore in CHORES_BY_ID.items() if chore.skippable} == {"poubelle-marron", "verre"}
+
+
+def test_format_when_in_french():
+    assert format_when(at(MONDAY, 20)) == "lun. 05/10 20h"
+    assert format_when(at(date(2026, 10, 11), 18, 30)) == "dim. 11/10 18h30"
