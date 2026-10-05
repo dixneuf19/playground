@@ -19,7 +19,7 @@ from telegram.ext import (
     filters,
 )
 
-from vitry_auberge_bot.chores import CHORES, CHORES_BY_ID, TZ, Chore, in_progress, upcoming
+from vitry_auberge_bot.chores import CHORES, CHORES_BY_ID, TZ, Chore, format_when, in_progress, upcoming
 from vitry_auberge_bot.tracker import Occurrence, Tracker
 
 load_dotenv()
@@ -169,8 +169,8 @@ async def show_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def show_upcoming(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     assert update.effective_message is not None
-    lines = [f"• {when:%a %d/%m %Hh%M} : {chore.message}" for when, chore in upcoming(datetime.now(TZ))]
-    await update.effective_message.reply_text("\n".join(lines) or "Rien de prévu 🎉", parse_mode=ParseMode.HTML)
+    lines = [f"• {format_when(when)} : {chore.label}" for when, chore in upcoming(datetime.now(TZ))]
+    await update.effective_message.reply_text("\n".join(lines) or "Rien de prévu 🎉")
 
 
 async def resume_in_progress(application: Application) -> None:
