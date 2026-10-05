@@ -74,7 +74,7 @@ CHORES: tuple[Chore, ...] = (
     Chore(
         id="legumes",
         label="🥕 Légumes du Rungis",
-        message="🥕 Ce soir c'est la <b>récup des légumes du Rungis</b> à Bizet, entre 18h et 21h. Qui y va ?",
+        message="🥕 Ce soir c'est la <b>récup des légumes du Rungis</b> à Bizet, entre 18h et 22h. Qui y va ?",
         weekdays=frozenset({MON}),
         start=time(17, 0, tzinfo=TZ),
         reminders=(timedelta(hours=2), timedelta(hours=4)),
