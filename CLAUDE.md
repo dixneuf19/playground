@@ -24,3 +24,18 @@ uv run pytest -m integration     # Integration test (downloads from YouTube, slo
 ```bash
 cd soundhoard && uv run pytest -m integration -v
 ```
+
+### vitry-auberge-bot
+
+Telegram bot reminding the Vitry flatmates of their chores. The schedule lives in `vitry_auberge_bot/chores.py`.
+
+**Common commands (run from `vitry-auberge-bot/`):**
+
+```bash
+uv sync             # Install dependencies
+make dev            # Run the bot locally (needs BOT_TELEGRAM_TOKEN and CHAT_ID in .env)
+make format         # Format + lint fix
+make check-format   # Check formatting + linting
+make typecheck      # Type check with ty
+make test           # Unit tests
+```
