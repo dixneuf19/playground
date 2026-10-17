@@ -14,7 +14,7 @@ ADD . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
-FROM python:3.13-slim-bookworm
+FROM python:3.14-slim-bookworm@sha256:48b13b003dda20b16f9442b8475aa05fe21bf6579a8c881db92ffb4d8fd20f83
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg curl unzip && \
