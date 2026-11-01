@@ -1,0 +1,42 @@
+[project]
+name = "karaoke"
+version = "0.1.0"
+description = "Self-hosted karaoke party: a big screen hosts the room, phones join by QR code"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "segno>=1.6",
+    "uvicorn[standard]>=0.32",
+    # Nightly, as in soundhoard: stable releases lag behind YouTube's player changes.
+    "yt-dlp[default]>=2026.8.18.122307.dev0",
+]
+
+[project.scripts]
+karaoke = "karaoke.__main__:main"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28",
+    "pytest>=8.3",
+    "ruff>=0.11",
+    "ty>=0.0.1a7",
+]
+
+[tool.uv]
+prerelease = "if-necessary"
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "C4", "UP", "N", "W", "SIM", "ARG", "PIE", "T20", "RUF"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+markers = ["integration: slow tests that require network (YouTube)"]
+addopts = "-m 'not integration'"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

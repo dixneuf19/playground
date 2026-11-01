@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Karaoké — écran</title>
+  <link rel="icon" href="/static/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css">
+  <style>
+    html, body { height: 100%; overflow: hidden; }
+    body { font-size: clamp(14px, 1.25vw, 28px); cursor: default; }
+    body.playing { cursor: none; }
+
+    /* --- idle screen: big QR + queue ------------------------------------ */
+    #idle {
+      position: fixed; inset: 0;
+      display: grid; grid-template-columns: 1.1fr 1fr; gap: 4vw;
+      padding: 6vh 6vw; align-items: center;
+    }
+    .hero h1 { font-size: 5.5em; line-height: 0.95; margin: 0 0 0.25em; }
+    .hero .lead { font-size: 1.5em; margin: 0 0 1.6em; }
+    .join { display: flex; gap: 2em; align-items: center; }
+    .qr-big {
+      width: 15em; height: 15em; background: white; border-radius: 1.2em; padding: 0.6em;
+      box-shadow: 0 0 0 0.35em rgba(255, 61, 139, 0.4), var(--shadow);
+    }
+    .qr-big img { width: 100%; height: 100%; }
+    .join .code { font-size: 3.4em; display: block; color: var(--text); }
+    .join .url { font-size: 1em; margin-top: 0.4em; word-break: break-all; }
+    .side { align-self: stretch; display: flex; flex-direction: column; min-height: 0; }
+    .side h2 { font-size: 1.1em; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin: 0 0 1em; }
+    .qlist { display: flex; flex-direction: column; gap: 0.7em; overflow: hidden; }
+    .qitem { display: flex; gap: 1em; align-items: center; padding: 0.7em; }
+    .qitem img { width: 6.5em; aspect-ratio: 16/9; object-fit: cover; border-radius: 0.6em; flex: none; }
+    .qitem .t { font-weight: 700; font-size: 1.15em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .qitem .a { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .qitem .s { margin-left: auto; color: var(--pink); font-weight: 700; white-space: nowrap; padding-left: 0.5em; }
+    .qitem .meta { min-width: 0; }
+    .empty { padding: 2.5em 1.5em; text-align: center; color: var(--muted); font-size: 1.2em; border-style: dashed; }
+    .prep { display: flex; align-items: center; gap: 0.8em; margin-top: 1.5em; font-size: 1.2em; color: var(--muted); }
+
+    /* --- player ---------------------------------------------------------- */
+    #stage { position: fixed; inset: 0; background: black; }
+    #video { width: 100%; height: 100%; object-fit: contain; background: black; }
+    .overlay { position: absolute; transition: opacity 0.5s, transform 0.5s; }
+    #singer {
+      top: 2.5vh; left: 2vw; padding: 0.55em 1.1em; border-radius: 999px;
+      background: rgba(12, 7, 24, 0.7); backdrop-filter: blur(10px);
+      font-weight: 700; font-size: 1.1em; display: flex; gap: 0.6em; align-items: center;
+    }
+    #corner {
+      right: 2vw; bottom: 3vh; display: flex; align-items: center; gap: 0.8em;
+      padding: 0.6em; border-radius: 1em; background: rgba(12, 7, 24, 0.7); backdrop-filter: blur(10px);
+    }
+    #corner img { width: 5.5em; height: 5.5em; background: white; border-radius: 0.5em; padding: 0.2em; }
+    #corner .code { font-size: 1.5em; }
+    #corner .muted { font-size: 0.85em; }
+    #upnext {
+      left: 50%; bottom: 3vh; transform: translate(-50%, 0);
+      padding: 0.8em 1.6em; border-radius: 999px; font-size: 1.15em;
+      background: var(--grad); font-weight: 600; box-shadow: var(--shadow); white-space: nowrap;
+    }
+    #upnext.off { opacity: 0; transform: translate(-50%, 150%); }
+    #pausebadge {
+      top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 2.5em; font-weight: 800;
+      padding: 0.6em 1.4em; border-radius: 1em; background: rgba(12, 7, 24, 0.8); backdrop-filter: blur(10px);
+    }
+
+    /* --- interstitial "your turn" --------------------------------------- */
+    #turn {
+      position: fixed; inset: 0; display: grid; place-items: center; text-align: center;
+      background: radial-gradient(circle at 50% 40%, rgba(123, 92, 255, 0.35), transparent 60%), var(--bg);
+      z-index: 10;
+    }
+    #turn .who { font-size: 1.6em; color: var(--muted); margin-bottom: 0.3em; }
+    #turn .name { font-size: 6em; font-weight: 800; line-height: 1; margin-bottom: 0.3em; }
+    #turn .song { font-size: 2.2em; font-weight: 700; }
+    #turn .artist { font-size: 1.4em; color: var(--muted); margin-top: 0.2em; }
+    #turn .count { margin-top: 1.4em; font-size: 1.2em; color: var(--muted); }
+    #turn .cancel {
+      display: inline-block; margin-top: 1em; padding: 0.4em 1.1em; border-radius: 999px;
+      font-size: 1.3em; font-weight: 700; color: #ffb020; background: rgba(255, 176, 32, 0.14);
+    }
+    #turn .pop { animation: pop 0.6s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+    @keyframes pop { from { transform: scale(0.6); opacity: 0; } }
+
+    /* --- start gate (browsers block autoplay with sound) ----------------- */
+    #gate {
+      position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; text-align: center;
+      background: rgba(12, 7, 24, 0.92); backdrop-filter: blur(6px);
+    }
+    #gate .btn { font-size: 1.6em; padding: 1em 2em; }
+    #gate p { margin-top: 1.5em; color: var(--muted); }
+
+    #offline {
+      position: fixed; top: 1em; left: 50%; transform: translateX(-50%); z-index: 30;
+      background: var(--red); color: white; padding: 0.4em 1em; border-radius: 999px; font-weight: 600;
+      display: none;
+    }
+    body.offline #offline { display: block; }
+  </style>
+</head>
+<body>
+  <div id="offline">Connexion perdue… reconnexion</div>
+
+  <div id="gate">
+    <div>
+      <button class="btn btn-primary" id="start">▶ Lancer la soirée</button>
+      <p>Clique une fois pour autoriser le son, puis <b>F</b> pour le plein écran.</p>
+    </div>
+  </div>
+
+  <section id="idle">
+    <div class="hero">
+      <h1 class="brand">Karaoké</h1>
+      <p class="lead muted">Scanne, choisis ta chanson, prends le micro.</p>
+      <div class="join">
+        <div class="qr-big"><img class="qr" alt="QR code"></div>
+        <div>
+          <span class="muted">Code de la salle</span>
+          <span class="code room-code"></span>
+          <div class="url muted join-url"></div>
+        </div>
+      </div>
+    </div>
+    <div class="side">
+      <h2>À suivre</h2>
+      <div class="qlist" id="idle-queue"></div>
+      <div class="prep hidden" id="prep"><span class="spinner"></span><span id="prep-text"></span></div>
+    </div>
+  </section>
+
+  <section id="stage" class="hidden">
+    <video id="video" playsinline preload="auto"></video>
+    <div id="singer" class="overlay"><span class="eq"><i></i><i></i><i></i></span><span id="singer-name"></span></div>
+    <div id="corner" class="overlay">
+      <img class="qr" alt="QR code">
+      <div><div class="muted">Ajoute ta chanson</div><div class="code room-code"></div></div>
+    </div>
+    <div id="upnext" class="overlay off"></div>
+    <div id="pausebadge" class="overlay hidden">⏸ Pause</div>
+  </section>
+
+  <section id="turn" class="hidden">
+    <div>
+      <div class="who">Au tour de</div>
+      <div class="name brand pop" id="turn-name"></div>
+      <div class="song" id="turn-song"></div>
+      <div class="artist" id="turn-artist"></div>
+      <div class="cancel hidden" id="turn-cancel"></div>
+      <div class="count" id="turn-count"></div>
+    </div>
+  </section>
+
+<script src="/static/common.js"></script>
+<script>
+  const TURN_SECONDS = 6;
+  const video = document.getElementById("video");
+  const $ = (id) => document.getElementById(id);
+  let room = null;
+  let loadedId = null;
+  let turnTimer = null;
+  let unlocked = false;
+
+  document.querySelectorAll(".qr").forEach((img) => (img.src = `/api/rooms/${ROOM_CODE}/qr.svg`));
+  document.querySelectorAll(".room-code").forEach((el) => (el.textContent = ROOM_CODE));
+  fetch(`/api/rooms/${ROOM_CODE}`).then((r) => r.json()).then((r) => {
+    $("idle").querySelector(".join-url").textContent = r.join_url.replace(/^https?:\/\//, "");
+  });
+
+  const sock = connectRoom("display", onState, onCommand);
+
+  $("start").onclick = () => {
+    unlocked = true;
+    $("gate").classList.add("hidden");
+    document.documentElement.requestFullscreen?.().catch(() => {});
+    if (room) render();
+  };
+
+  function onState(r) {
+    room = r;
+    render();
+  }
+
+  function render() {
+    const cur = room.current;
+    if (!cur) {
+      clearTimeout(turnTimer);
+      loadedId = null;
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      $("turn").classList.add("hidden");
+      $("stage").classList.add("hidden");
+      $("idle").classList.remove("hidden");
+      document.body.classList.remove("playing");
+      renderIdleQueue();
+      return;
+    }
+    if (cur.id !== loadedId && unlocked) startSong(cur);
+    $("singer-name").textContent = cur.singer;
+    $("stage").classList.toggle("paused", room.state === "paused");
+    $("pausebadge").classList.toggle("hidden", room.state !== "paused" || !video.src);
+    video.volume = room.volume;
+    updateUpNext();
+  }
+
+  function renderIdleQueue() {
+    const q = room.queue;
+    $("idle-queue").innerHTML = q.length
+      ? q.slice(0, 6).map((i) => `
+        <div class="card qitem">
+          <img src="${esc(i.thumbnail)}" alt="">
+          <div class="meta"><div class="t">${esc(i.title)}</div><div class="a">${esc(i.artist)}</div></div>
+          <div class="s">${i.cancelled ? "🚫 " : ""}${esc(i.singer)}</div>
+        </div>`).join("")
+      : `<div class="card empty">Personne n'a encore choisi de chanson.<br>À vous de jouer !</div>`;
+    const loading = q.find((i) => i.status === "downloading" || i.status === "pending");
+    $("prep").classList.toggle("hidden", !loading || q.some((i) => i.status === "ready"));
+    if (loading) {
+      const pct = loading.status === "downloading" ? ` — ${Math.round(loading.progress * 100)}%` : "";
+      $("prep-text").textContent = `Préparation de « ${loading.title} »${pct}`;
+    }
+  }
+
+  function startSong(item) {
+    loadedId = item.id;
+    clearTimeout(turnTimer);
+    video.pause();
+    video.src = `/media/${item.video_id}.mp4`;
+    video.load();
+    $("idle").classList.add("hidden");
+    $("stage").classList.remove("hidden");
+    document.body.classList.add("playing");
+
+    $("turn-name").textContent = item.singer;
+    $("turn-song").textContent = item.title;
+    $("turn-artist").textContent = item.artist;
+    $("turn-cancel").textContent = item.cancelled ? `🚫 ${item.cancelled}` : "";
+    $("turn-cancel").classList.toggle("hidden", !item.cancelled);
+    const name = $("turn-name");
+    name.classList.remove("pop"); void name.offsetWidth; name.classList.add("pop");
+    $("turn").classList.remove("hidden");
+
+    let left = TURN_SECONDS;
+    const tick = () => {
+      if (loadedId !== item.id) return;
+      if (left <= 0) {
+        $("turn").classList.add("hidden");
+        if (room.state !== "paused") video.play().catch(() => {});
+        return;
+      }
+      $("turn-count").textContent = `Ça commence dans ${left}…`;
+      left -= 1;
+      turnTimer = setTimeout(tick, 1000);
+    };
+    tick();
+  }
+
+  function updateUpNext() {
+    const next = room?.queue[0];
+    const el = $("upnext");
+    const t = video.currentTime, d = video.duration;
+    const show = next && d && (t < 12 || d - t < 25);
+    if (next) el.innerHTML = `À suivre : <b>${esc(next.title)}</b> — ${esc(next.singer)}`;
+    el.classList.toggle("off", !show);
+  }
+
+  video.addEventListener("timeupdate", updateUpNext);
+  video.addEventListener("ended", () => sock.send({ type: "ended", item_id: loadedId }));
+  video.addEventListener("error", () => {
+    if (loadedId) setTimeout(() => sock.send({ type: "ended", item_id: loadedId }), 3000);
+  });
+  video.addEventListener("play", () => sock.send({ type: "player", state: "playing" }));
+  video.addEventListener("pause", () => {
+    if (!video.ended && $("turn").classList.contains("hidden")) sock.send({ type: "player", state: "paused" });
+  });
+
+  function onCommand(cmd) {
+    if (cmd.action === "pause") video.pause();
+    else if (cmd.action === "play" && $("turn").classList.contains("hidden")) video.play().catch(() => {});
+    else if (cmd.action === "restart") { video.currentTime = 0; video.play().catch(() => {}); }
+    else if (cmd.action === "volume") video.volume = cmd.value;
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "f" || e.key === "F") {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen?.();
+    } else if (e.key === " " && room?.current) {
+      e.preventDefault();
+      sock.send({ type: video.paused ? "play" : "pause" });
+    } else if ((e.key === "n" || e.key === "ArrowRight") && room?.current) {
+      sock.send({ type: "skip" });
+    }
+  });
+</script>
+</body>
+</html>

@@ -25,6 +25,22 @@ uv run pytest -m integration     # Integration test (downloads from YouTube, slo
 cd soundhoard && uv run pytest -m integration -v
 ```
 
+### karaoke
+
+Karaoke party web app: a big screen creates a room and plays the queue, phones join by QR code. FastAPI + WebSockets, plain HTML/JS frontend in `karaoke/static/` (no build step), yt-dlp for search (KaraFun YouTube channels first) and downloads.
+
+**Common commands (run from `karaoke/`):**
+
+```bash
+uv sync                          # Install dependencies
+make dev                         # Run locally on :8000
+make format                      # Format + lint fix
+make check-format                # Check formatting + linting
+make typecheck                   # Type check with ty
+make test                        # Unit tests (fast, no network)
+uv run pytest -m integration     # Real YouTube search + download (slow)
+```
+
 ### vitry-auberge-bot
 
 Telegram bot reminding the Vitry flatmates of their chores. The schedule lives in `vitry_auberge_bot/chores.py`.

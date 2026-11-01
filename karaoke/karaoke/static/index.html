@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Karaoké</title>
+  <link rel="icon" href="/static/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css">
+  <style>
+    main { min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; }
+    .wrap { width: 100%; max-width: 440px; text-align: center; }
+    h1 { font-size: clamp(3rem, 12vw, 4.5rem); margin: 0 0 0.1em; }
+    .lead { margin: 0 0 2.2em; font-size: 1.1rem; }
+    .panel { padding: 22px; text-align: left; margin-bottom: 16px; }
+    .panel h2 { margin: 0 0 0.3em; font-size: 1.15rem; }
+    .panel p { margin: 0 0 1em; font-size: 0.95rem; }
+    .row { display: flex; gap: 10px; }
+    .row .field { flex: 1; }
+    #code { text-transform: uppercase; letter-spacing: 0.3em; font-weight: 700; text-align: center; }
+    .err { color: var(--red); font-size: 0.9rem; margin-top: 0.6em; min-height: 1.2em; }
+    .mic { font-size: 3rem; margin-bottom: 0.2em; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="wrap">
+    <div class="mic">🎤</div>
+    <h1 class="brand">Karaoké</h1>
+    <p class="lead muted">Le grand écran lance la soirée,<br>les téléphones choisissent les chansons.</p>
+
+    <section class="card panel">
+      <h2>Lancer une soirée</h2>
+      <p class="muted">À ouvrir sur l'ordinateur branché à la télé ou au projecteur.</p>
+      <form id="create" class="row">
+        <input id="password" class="field hidden" type="password" placeholder="Mot de passe" autocomplete="current-password">
+        <button class="btn btn-primary" type="submit" style="flex:1">Créer la salle</button>
+      </form>
+      <div class="err" id="create-err"></div>
+    </section>
+
+    <section class="card panel">
+      <h2>Rejoindre</h2>
+      <p class="muted">Tape le code affiché à l'écran.</p>
+      <form id="join" class="row">
+        <input id="code" class="field" maxlength="4" placeholder="ABCD" autocomplete="off" autocapitalize="characters">
+        <button class="btn btn-ghost" type="submit">Go</button>
+      </form>
+      <div class="err" id="join-err"></div>
+    </section>
+  </div>
+</main>
+<script>
+  const pw = document.getElementById("password");
+  fetch("/api/config").then(r => r.json()).then(c => {
+    if (c.password_required) pw.classList.remove("hidden");
+  });
+
+  document.getElementById("create").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = document.getElementById("create-err");
+    err.textContent = "";
+    const res = await fetch("/api/rooms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pw.value }),
+    });
+    if (!res.ok) { err.textContent = res.status === 403 ? "Mauvais mot de passe" : "Erreur, réessaie"; return; }
+    const { code } = await res.json();
+    location.href = `/display/${code}`;
+  });
+
+  document.getElementById("join").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const code = document.getElementById("code").value.trim().toUpperCase();
+    const err = document.getElementById("join-err");
+    if (code.length !== 4) { err.textContent = "Le code fait 4 caractères"; return; }
+    const res = await fetch(`/api/rooms/${code}`);
+    if (!res.ok) { err.textContent = "Salle introuvable"; return; }
+    location.href = `/r/${code}`;
+  });
+</script>
+</body>
+</html>
