@@ -16,6 +16,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 FROM python:3.13-slim-bookworm
 
+# Links the ghcr.io package to the repository (lets Actions push to it).
+LABEL org.opencontainers.image.source=https://github.com/dixneuf19/playground
+
 # ffmpeg merges the video and audio streams; deno solves YouTube's JS
 # challenges (the runtime yt-dlp enables by default: it runs that code with no
 # file or network access). Pinned so Renovate can bump it.
