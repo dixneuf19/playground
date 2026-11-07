@@ -151,15 +151,19 @@ Iterate without a git round-trip; do not commit or push unless asked.
 
 ```bash
 make check-format typecheck test
-docker buildx build --platform linux/amd64 -t ghcr.io/dixneuf19/karaoke:main --push .
+docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/dixneuf19/karaoke:main --push .
 kubectl -n karaoke rollout restart deploy/karaoke
 ```
 
+Pods run on any node (arm64 Raspberry Pis and the amd64 worker), so the image
+must be multi-arch: an amd64-only push breaks pods on the Pis. Building arm64
+locally needs QEMU emulation installed once
+(`docker run --privileged --rm tonistiigi/binfmt --install arm64`).
+`.github/workflows/karaoke-docker.yml` builds both and pushes `:main` on every
+push to main; Image Updater then pins that digest.
+
 When chart values change: `make deploy` in the gitops chart directory
 (`helm upgrade --install -n karaoke karaoke . -f values.yaml`).
-The image is amd64-only for now (no arm64 emulation on the laptop), hence the
-amd64 nodeSelector; `.github/workflows/karaoke-docker.yml` builds amd64+arm64 and
-pushes `:main` on every push to main, overwriting a local push of the same tag.
 
 ## Gitops (`~/codes/brassberry/brassberry-gitops`)
 
