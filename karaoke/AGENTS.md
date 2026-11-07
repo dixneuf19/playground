@@ -37,7 +37,8 @@ by French-speaking friends, live at https://karaoke.dixneuf19.fr.
 |---|---|
 | `rooms.py`, `photos.py` | Pure state and logic, no I/O (Room, QueueItem, PhotoQueue). Unit-tested directly. |
 | `db.py` | `Store`: Postgres via asyncpg. Schema, `room_tx`, videos/photos tables, NOTIFY. |
-| `app.py` | FastAPI app + WebSockets. `Hub` = this replica's sockets + background loops. |
+| `app.py` | FastAPI app + WebSockets. `Hub` = this replica's sockets, plus the background loops when it leads. |
+| `leader.py` | Leader election with a Postgres advisory lock held on a dedicated connection. |
 | `search.py` | yt-dlp flat search (channels / all YouTube / single link), title parsing, ranking. |
 | `library.py` | yt-dlp download to `<data>/songs/<video_id>.mp4` (≤720p H.264 + AAC). |
 | `cancelled.py` | Cancelled artists, matched on whole normalized words. |
@@ -60,21 +61,24 @@ Prod runs 2 replicas. Everything a replica knows lives in Postgres or on the sha
    (the page reconnects and gets the full state), so one frozen phone never holds
    up the TV. Display commands (`play`/`pause`/`restart`/`volume`) are sent
    as `{"room", "command"}` via `tx.command()` and forwarded only to screens.
-3. Background loops run on **every** replica, so each must be coordinated:
-   photo rotation every 0.5 s (`room_tx(skip_locked=True)`: one replica per room),
-   download resume every 15 s (claim row in `videos`; also recreates video rows
-   missing for queued songs, re-downloads lost files, and starts a ready song in
-   idle rooms), prune every 10 min (rooms idle 24 h, orphan photo folders, temp
-   files older than 1 h), LISTEN health check every 5 s (`SELECT 1`, reconnect).
-4. Downloads: `videos` row is the claim (`pending → downloading → ready|error`);
-   the owner heartbeats (≤15 s); another replica takes over after 60 s without one.
-   Max 2 downloads per replica. A download writes into `songs/.tmp/<worker>-<id>/`
-   and is renamed into `songs/` when complete, so the cache only ever holds whole
-   files even if two replicas download the same video. `finish_download` only
-   counts for the replica holding the claim. On shutdown a replica releases its
-   claims. LRU eviction (`KARAOKE_CACHE_MAX_GB`, 20) under an advisory lock,
-   never evicting a video still in a queue (re-checked in the `DELETE`). When a
-   download finishes, idle rooms waiting on it advance.
+3. **One leader runs the background work** (`leader.py`). Every replica serves
+   pages and phone actions; the leader also runs photo rotation (0.5 s), the
+   download loop, a repair pass (15 s) and pruning (10 min). Leadership is a
+   session-level `pg_try_advisory_lock` on a connection of its own: when the pod
+   stops or dies the connection closes and Postgres releases the lock; followers
+   retry every 5 s (TCP keepalives on that connection catch a vanished node in
+   ~30 s). The first replica up takes it during startup. A new leader puts
+   `downloading` videos back to `pending` and starts them over.
+4. Downloads: a follower that queues a new video only NOTIFIES
+   `{"downloads": true}` (after the song is saved in the queue); the leader's loop
+   wakes, picks queued `pending` videos (also scans every 5 s), 2 at a time:
+   `pending → downloading → ready|error`. A download writes into
+   `songs/.tmp/<worker>-<id>/` and is renamed into `songs/` when complete, so the
+   cache only ever holds whole files, even if a demoted leader's yt-dlp thread
+   finishes late. LRU eviction (`KARAOKE_CACHE_MAX_GB`, 20) never evicts a video
+   still in a queue (re-checked in the `DELETE`, since followers add songs
+   concurrently). The repair pass recreates video rows missing for queued songs,
+   re-downloads lost files and starts a ready song in idle rooms.
 5. Position reports (`position`) are a plain `UPDATE` without lock or NOTIFY:
    they are frequent and nobody needs a push for them. They only apply while
    `rooms.current_item_id` is the reported song.
@@ -85,6 +89,10 @@ Invariants to keep:
 
 - Never keep state only in process memory (the `downloading` set and photo-file
   deletion timers are local optimizations, not state).
+- Background work belongs on the leader (`Hub._lead`), never in a loop every
+  replica runs. Actions from phones run on any replica, inside `room_tx`.
+- Room changes from the leader and from phones meet on the room row lock
+  (`room_tx`); keep it that way rather than adding other locks.
 - Mutate rooms only inside `room_tx`, with logic in `rooms.py`/`photos.py`.
 - Keep NOTIFY payloads tiny (room code + optional command; Postgres caps them at
   8000 bytes). Replicas re-read state from the DB, never from the payload.
@@ -138,7 +146,9 @@ anyone can create a room), `PORT`, `LOG_LEVEL`.
 - Unit tests need Postgres: `KARAOKE_TEST_DATABASE_URL` (CI uses a service
   container), otherwise `conftest.py` starts a throwaway `postgres:18-alpine` with
   docker. Tables are dropped before each test.
-- The `client` fixture stubs `hub.kick_download`: unit tests never reach YouTube.
+- The `client` fixture sets `hub.download_videos = False`: unit tests never reach
+  YouTube (`test_leader_downloads_a_queued_song_and_starts_it` fakes the
+  download instead). `test_one_leader_and_a_quick_takeover` covers the election.
 - Put logic in `rooms.py`/`photos.py`/`search.py` and test it there; test wiring
   in `test_app.py` through HTTP and WebSockets. `test_two_replicas_share_rooms`
   runs two app instances on one database: extend it for cross-replica behaviour.
@@ -184,6 +194,10 @@ docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/dixneuf19/kara
 
 - **Postgres + LISTEN/NOTIFY** for multi-replica state: the playground DB already
   exists, no Redis, no sticky sessions; HA validated by killing a pod.
+- **A leader instead of coordinating every replica**: download claims, heartbeats
+  and per-job locks were the source of most multi-replica bugs. If the project
+  grows, the next step is a dedicated worker Deployment (leader-only work) and
+  frontend replicas, which this split already allows.
 - **Single CNPG instance**: simpler, no HA; S3 backups cover data loss.
 - **Download, don't stream**: smooth playback on the TV and a reusable cache;
   H.264/AAC MP4 plays everywhere, including old smart TVs. yt-dlp is a nightly

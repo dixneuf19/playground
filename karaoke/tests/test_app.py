@@ -28,7 +28,7 @@ def _state(ws: WebSocketTestSession, check: Callable[[dict[str, Any]], bool]) ->
 
 
 def _no_downloads(client: TestClient) -> None:
-    client.app.state.hub.kick_download = lambda _video_id: None  # type: ignore[attr-defined]
+    client.app.state.hub.download_videos = False  # type: ignore[attr-defined]
 
 
 def test_room_creation_requires_password(client: TestClient) -> None:
@@ -213,8 +213,7 @@ def test_reloaded_screen_gets_the_playback_position(client: TestClient) -> None:
     portal = client.portal
     assert portal is not None
     portal.call(store.video_status, "abcdefghijk")  # registers the video
-    portal.call(store.claim_download, "abcdefghijk", "test")
-    portal.call(store.finish_download, "abcdefghijk", "test", True, "Song", 1)
+    portal.call(store.finish_download, "abcdefghijk", True, "Song", 1)
     code = _room(client)
     with client.websocket_connect(f"/ws/{code}?role=display") as screen:
         screen.receive_json()
@@ -256,3 +255,44 @@ def test_search_needs_a_live_room(client: TestClient) -> None:
 
 def test_media_rejects_odd_ids(client: TestClient) -> None:
     assert client.get("/media/..%2F..%2Fetc.mp4").status_code == 404
+
+
+def test_one_leader_and_a_quick_takeover(
+    make_settings: Callable[..., Settings],
+) -> None:
+    cfg = make_settings()
+    first, second = TestClient(create_app(cfg)), TestClient(create_app(cfg))
+    with first:
+        leader = first.app.state.hub.leadership  # type: ignore[attr-defined]
+        assert leader.is_leader  # the first replica up takes the lock at once
+        second.__enter__()
+        try:
+            follower = second.app.state.hub.leadership  # type: ignore[attr-defined]
+            portal = second.portal
+            assert portal is not None
+            portal.call(follower.step)  # a check, as the poll loop would do
+            assert not follower.is_leader
+            first.__exit__(None, None, None)  # the leader stops: lock released
+            portal.call(follower.step)
+            assert follower.is_leader
+        finally:
+            second.__exit__(None, None, None)
+
+
+def test_leader_downloads_a_queued_song_and_starts_it(client: TestClient) -> None:
+    hub = client.app.state.hub  # type: ignore[attr-defined]
+
+    def fake_download(video_id: str, _worker: str, on_progress: Any) -> tuple[str, int]:
+        on_progress(0.5)
+        hub.library.path_for(video_id).write_bytes(b"fake mp4")
+        return "Song", 8
+
+    hub.library.download = fake_download
+    hub.download_videos = True
+    code = _room(client)
+    with client.websocket_connect(f"/ws/{code}") as guest:
+        guest.receive_json()
+        guest.send_json({"type": "add", "video_id": "abcdefghijk", "title": "Song"})
+        room = _state(guest, lambda r: r["current"] is not None)
+    assert room["current"]["status"] == "ready"
+    assert room["state"] == "playing"

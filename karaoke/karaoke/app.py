@@ -1,6 +1,10 @@
 """HTTP + WebSocket app. Safe to run several replicas: all state is in Postgres
 (karaoke.db), files on a shared volume, and replicas tell each other about
-changes with LISTEN/NOTIFY. Each replica only keeps its own open sockets."""
+changes with LISTEN/NOTIFY. Each replica only keeps its own open sockets.
+
+Every replica serves pages and phone actions. One of them, the leader
+(karaoke.leader), also runs the background work: downloads, photo rotation,
+cache eviction and pruning."""
 
 import asyncio
 import contextlib
@@ -29,6 +33,7 @@ from pydantic import BaseModel
 from karaoke.cancelled import cancel_reason
 from karaoke.config import Settings, settings
 from karaoke.db import CHANNEL, Store
+from karaoke.leader import Leadership
 from karaoke.library import Library, valid_video_id
 from karaoke.photos import MAX_PENDING_PER_ROOM, MAX_PENDING_PER_UPLOADER, Photo
 from karaoke.rooms import ROOM_TTL_SECONDS, ItemStatus, QueueItem, Room
@@ -47,12 +52,12 @@ logger = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
 MAX_CONCURRENT_DOWNLOADS = 2
 PROGRESS_INTERVAL = 1.0
-HEARTBEAT_INTERVAL = 15
 PHOTO_SECONDS = 10
 PHOTO_GAP_SECONDS = 1.5
 PHOTO_FILE_GRACE = 5  # screens finish fading a photo out before its file goes
 TICK_SECONDS = 0.5
-RESUME_EVERY = 15  # seconds between scans for downloads to resume
+DOWNLOAD_SCAN = 5  # seconds between scans for pending downloads, if not woken
+REPAIR_EVERY = 15  # seconds between safety-net checks
 PRUNE_EVERY = 600
 MAX_PHOTO_BYTES = 10 * 1024 * 1024
 MAX_QUEUE = 200
@@ -107,9 +112,12 @@ class Hub:
         self.upload_dir.mkdir(parents=True, exist_ok=True)
         self.sockets: dict[str, set[WebSocket]] = defaultdict(set)
         self.displays: dict[str, set[WebSocket]] = defaultdict(set)
-        self.download_slots = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
-        self.downloading: set[str] = set()  # on this replica
+        self.downloading: set[str] = set()  # by this replica, when leader
+        self.download_videos = True  # tests turn it off: no YouTube
+        self._wake_downloads = asyncio.Event()
         self._tasks: list[asyncio.Task[None]] = []
+        self._leader_tasks: list[asyncio.Task[None]] = []
+        self.leadership = Leadership(cfg.dsn(), self._lead, self._follow)
         self._listener: asyncpg.Connection | None = None
         # One push loop per room: pushes stay in order and bursts coalesce.
         self._dirty: set[str] = set()
@@ -121,20 +129,37 @@ class Hub:
 
     async def start(self) -> None:
         await self._listen()
+        await self.leadership.step()  # the first replica up leads right away
         self._tasks = [
-            asyncio.create_task(self._every(TICK_SECONDS, self.rotate_photos)),
-            asyncio.create_task(self._every(RESUME_EVERY, self.resume_downloads)),
-            asyncio.create_task(self._every(PRUNE_EVERY, self.prune)),
             asyncio.create_task(self._every(5, self._keep_listening)),
+            asyncio.create_task(self.leadership.run()),
         ]
 
     async def stop(self) -> None:
         for task in [*self._tasks, *self._pushers.values()]:
             task.cancel()
-        with contextlib.suppress(Exception):
-            await self.store.release_downloads(self.worker)
+        # Hands leadership over at once: the next leader restarts unfinished
+        # downloads (the files of this one are never half-written in songs/).
+        await self.leadership.close()
         if self._listener is not None:
             await self._listener.close()
+
+    async def _lead(self) -> None:
+        await self.store.requeue_interrupted_downloads()
+        self._leader_tasks = [
+            asyncio.create_task(self._every(TICK_SECONDS, self.rotate_photos)),
+            asyncio.create_task(self._download_loop()),
+            asyncio.create_task(self._every(REPAIR_EVERY, self.repair)),
+            asyncio.create_task(self._every(PRUNE_EVERY, self.prune)),
+        ]
+
+    async def _follow(self) -> None:
+        # Downloads stop here; the new leader starts them over. A yt-dlp thread
+        # already running finishes in its own temp folder, harmlessly.
+        for task in list(self._leader_tasks):
+            task.cancel()
+        self._leader_tasks = []
+        self.downloading.clear()
 
     def _spawn(self, coro: Awaitable[None]) -> None:
         """Fire and forget, keeping a reference so the task is not collected."""
@@ -176,6 +201,9 @@ class Hub:
             await self.push_state(code)
 
     async def _dispatch(self, msg: dict[str, Any]) -> None:
+        if msg.get("downloads"):
+            self._wake_downloads.set()
+            return
         code = msg.get("room", "")
         if "command" in msg:
             displays = self.displays.get(code)
@@ -232,47 +260,39 @@ class Hub:
     # --- downloads ----------------------------------------------------------
 
     async def ensure_download(self, video_id: str) -> str:
-        """Status of the video, starting its download if needed."""
+        """Status of the video, reset to pending if its file went missing."""
         status = await self.store.video_status(video_id)
         if status == "ready" and not self.library.exists(video_id):
             await self.store.reset_video(video_id)  # evicted or lost
             status = "pending"
-        if status == "pending":
-            self.kick_download(video_id)
         return status
 
-    def kick_download(self, video_id: str) -> None:
-        if video_id not in self.downloading:
-            self.downloading.add(video_id)
-            task = asyncio.create_task(self._download(video_id))
-            self._tasks.append(task)
-            task.add_done_callback(self._tasks.remove)
-
-    async def resume_downloads(self) -> None:
-        for video_id in await self.store.restore_queued_videos():
-            if not self.library.exists(video_id):
-                await self.store.reset_video(video_id)  # file gone: fetch again
-        for video_id in await self.store.downloads_to_resume():
-            self.kick_download(video_id)
-        for code in await self.store.idle_rooms_with_ready_song():
-            async with self.store.room_tx(code, skip_locked=True) as tx:
-                if tx is None or tx.room.current is not None:
-                    if tx is not None:
-                        tx.save = False
-                    continue
-                tx.room.advance()
+    async def _download_loop(self) -> None:
+        """Leader only: start pending downloads, a few at a time."""
+        while True:
+            self._wake_downloads.clear()
+            try:
+                if self.download_videos:
+                    for video_id in await self.store.pending_downloads():
+                        if len(self.downloading) >= MAX_CONCURRENT_DOWNLOADS:
+                            break
+                        if video_id not in self.downloading:
+                            self.downloading.add(video_id)
+                            self._leader_tasks.append(
+                                asyncio.create_task(self._download(video_id))
+                            )
+            except Exception:
+                logger.exception("Download scan failed")
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self._wake_downloads.wait(), DOWNLOAD_SCAN)
 
     async def _download(self, video_id: str) -> None:
         try:
-            async with self.download_slots:
-                if not await self.store.claim_download(video_id, self.worker):
-                    return  # another replica has it
-                await self._notify_video(video_id)
-                ok, title, size = await self._run_download(video_id)
-            if not await self.store.finish_download(
-                video_id, self.worker, ok, title, size
-            ):
-                logger.warning("%s was taken over by another replica", video_id)
+            if not await self.store.start_download(video_id):
+                return
+            await self._notify_video(video_id)
+            ok, title, size = await self._run_download(video_id)
+            await self.store.finish_download(video_id, ok, title, size)
             if ok:
                 for evicted in await self.store.evict(self.max_cache_bytes):
                     self.library.delete(evicted)
@@ -281,30 +301,31 @@ class Hub:
                         if tx and tx.room.current is None:
                             tx.room.advance()
             await self._notify_video(video_id)
+        except Exception:
+            logger.exception("Download of %s failed", video_id)
         finally:
             self.downloading.discard(video_id)
+            self._wake_downloads.set()  # a slot is free
+            task = asyncio.current_task()
+            if task in self._leader_tasks:
+                self._leader_tasks.remove(task)  # type: ignore[arg-type]
 
     async def _run_download(self, video_id: str) -> tuple[bool, str, int]:
-        loop = asyncio.get_running_loop()
         latest: dict[str, float] = {}
 
         def on_progress(p: float) -> None:
             latest["p"] = p
 
         async def report() -> None:
-            last_beat = 0.0
             while True:
                 await asyncio.sleep(PROGRESS_INTERVAL)
-                now = loop.time()
-                if "p" in latest or now - last_beat > HEARTBEAT_INTERVAL:
-                    try:
-                        await self.store.heartbeat(
-                            video_id, self.worker, latest.pop("p", None)
-                        )
-                        await self._notify_video(video_id)
-                        last_beat = now
-                    except Exception:  # a DB blip must not stop the heartbeat
-                        logger.warning("Heartbeat failed for %s", video_id)
+                if "p" not in latest:
+                    continue
+                try:
+                    await self.store.set_progress(video_id, latest.pop("p"))
+                    await self._notify_video(video_id)
+                except Exception:  # only the progress bar suffers
+                    logger.warning("Progress update failed for %s", video_id)
 
         reporter = asyncio.create_task(report())
         try:
@@ -317,6 +338,22 @@ class Hub:
             return False, "", 0
         finally:
             reporter.cancel()
+
+    async def repair(self) -> None:
+        """Leader safety net: queued songs whose video row or file is gone get
+        downloaded again; rooms idle next to a ready song start it."""
+        for video_id in await self.store.restore_queued_videos():
+            if not self.library.exists(video_id):
+                await self.store.reset_video(video_id)
+        self._wake_downloads.set()
+        for code in await self.store.idle_rooms_with_ready_song():
+            async with self.store.room_tx(code) as tx:
+                if tx is None:
+                    continue
+                if tx.room.current is not None:
+                    tx.save = False
+                    continue
+                tx.room.advance()
 
     async def _notify_video(self, video_id: str) -> None:
         for code in await self.store.rooms_with_video(video_id):
@@ -343,15 +380,14 @@ class Hub:
         room.photo_until = time.time() + PHOTO_GAP_SECONDS
 
     async def rotate_photos(self) -> None:
-        """Advance the photo slot of rooms whose timer ran out. Every replica
-        runs this; SKIP LOCKED makes exactly one of them handle each room."""
+        """Leader only: advance the photo slot of rooms whose timer ran out."""
         for code in await self.store.rooms_due_for_photo():
-            async with self.store.room_tx(code, skip_locked=True) as tx:
+            async with self.store.room_tx(code) as tx:
                 if tx is None:
                     continue
                 room, now = tx.room, time.time()
                 if room.photo_until and room.photo_until > now:
-                    tx.save = False  # another replica just did it
+                    tx.save = False  # changed meanwhile (photo skipped)
                 elif room.photo is not None:
                     self._hide_photo(room)
                 elif (photo := room.photos.pop_next()) is not None:
@@ -419,7 +455,7 @@ class Hub:
             ]
             for video_id in failed:
                 await self.store.reset_video(video_id)
-                self.kick_download(video_id)
+                await self.store.notify_downloads()
                 await self._notify_video(video_id)
             return
         elif kind == "position":
@@ -501,6 +537,10 @@ class Hub:
         if tx is not None:
             for photo_id in tx.removed_photos:
                 self.forget_photo(code, photo_id)
+        if video_status == "pending":
+            # Only now that the song is in the queue: the leader downloads
+            # queued videos.
+            await self.store.notify_downloads()
 
 
 def create_app(cfg: Settings = settings) -> FastAPI:

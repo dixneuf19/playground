@@ -27,8 +27,6 @@ logger = logging.getLogger(__name__)
 
 CHANNEL = "karaoke"
 SCHEMA_LOCK = 4242_0001  # pg_advisory_xact_lock keys
-EVICT_LOCK = 4242_0002
-STALE_DOWNLOAD_SECONDS = 60
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS rooms (
@@ -53,8 +51,8 @@ CREATE TABLE IF NOT EXISTS videos (
     title      text   NOT NULL DEFAULT '',
     size       bigint NOT NULL DEFAULT 0,
     last_used  timestamptz NOT NULL DEFAULT now(),
-    claimed_by text,
-    heartbeat  timestamptz
+    claimed_by text,      -- unused since the leader runs every download
+    heartbeat  timestamptz -- unused, kept so the schema stays additive
 );
 CREATE TABLE IF NOT EXISTS queue_items (
     id         text PRIMARY KEY,
@@ -171,14 +169,11 @@ class Store:
         )
 
     @asynccontextmanager
-    async def room_tx(
-        self, code: str, *, skip_locked: bool = False
-    ) -> AsyncGenerator[RoomTx | None]:
-        """Yield the locked room (None if missing, or already locked with
-        skip_locked), save it and notify every replica on clean exit."""
+    async def room_tx(self, code: str) -> AsyncGenerator[RoomTx | None]:
+        """Yield the locked room (None if missing), save it and notify every
+        replica on clean exit."""
         async with self.pool.acquire() as conn, conn.transaction():
-            lock = "FOR UPDATE SKIP LOCKED" if skip_locked else "FOR UPDATE"
-            room = await self._load(conn, code.upper(), lock=lock)
+            room = await self._load(conn, code.upper(), lock="FOR UPDATE")
             if room is None:
                 yield None
                 return
@@ -380,64 +375,53 @@ class Store:
     async def reset_video(self, video_id: str) -> None:
         """Download again: after an error, or when the file went missing."""
         await self.pool.execute(
-            """UPDATE videos SET status = 'pending', progress = 0, claimed_by = NULL
+            """UPDATE videos SET status = 'pending', progress = 0
                WHERE video_id = $1 AND status IN ('ready', 'error')""",
             video_id,
         )
 
-    async def claim_download(self, video_id: str, worker: str) -> bool:
-        claimed = await self.pool.fetchval(
-            """UPDATE videos SET status = 'downloading', progress = 0,
-                   claimed_by = $2, heartbeat = now()
-               WHERE video_id = $1 AND (status = 'pending' OR (
-                   status = 'downloading'
-                   AND heartbeat < now() - make_interval(secs => $3)))
-               RETURNING video_id""",
-            video_id,
-            worker,
-            STALE_DOWNLOAD_SECONDS,
-        )
-        return claimed is not None
+    # Downloads are run by the leader replica only (karaoke.leader), so a
+    # plain status is enough: no claims between replicas.
 
-    async def heartbeat(
-        self, video_id: str, worker: str, progress: float | None
-    ) -> None:
-        await self.pool.execute(
-            """UPDATE videos SET heartbeat = now(), progress = coalesce($3, progress)
-               WHERE video_id = $1 AND claimed_by = $2 AND status = 'downloading'""",
+    async def start_download(self, video_id: str) -> bool:
+        started = await self.pool.fetchval(
+            """UPDATE videos SET status = 'downloading', progress = 0
+               WHERE video_id = $1 AND status = 'pending' RETURNING video_id""",
             video_id,
-            worker,
+        )
+        return started is not None
+
+    async def set_progress(self, video_id: str, progress: float) -> None:
+        await self.pool.execute(
+            "UPDATE videos SET progress = $2 WHERE video_id = $1 AND status = 'downloading'",
+            video_id,
             progress,
         )
 
     async def finish_download(
-        self, video_id: str, worker: str, ok: bool, title: str = "", size: int = 0
-    ) -> bool:
-        """Record the outcome, unless another replica took the download over
-        meanwhile (then its own outcome counts). A finished file still lands in
-        the cache: renames are atomic, so it is complete either way."""
-        done = await self.pool.fetchval(
-            """UPDATE videos SET status = $3, progress = $4, title = $5, size = $6,
-                   last_used = now(), claimed_by = NULL
-               WHERE video_id = $1 AND claimed_by = $2
-               RETURNING video_id""",
+        self, video_id: str, ok: bool, title: str = "", size: int = 0
+    ) -> None:
+        await self.pool.execute(
+            """UPDATE videos SET status = $2, progress = $3, title = $4, size = $5,
+                   last_used = now()
+               WHERE video_id = $1""",
             video_id,
-            worker,
             "ready" if ok else "error",
             1.0 if ok else 0.0,
             title,
             size,
         )
-        return done is not None
 
-    async def release_downloads(self, worker: str) -> None:
-        """Shutting down: hand unfinished downloads to the other replicas now
-        rather than after the stale delay."""
+    async def requeue_interrupted_downloads(self) -> None:
+        """A new leader starts over what the previous one left unfinished."""
         await self.pool.execute(
-            """UPDATE videos SET status = 'pending', progress = 0, claimed_by = NULL
-               WHERE claimed_by = $1 AND status = 'downloading'""",
-            worker,
+            "UPDATE videos SET status = 'pending', progress = 0 WHERE status = 'downloading'"
         )
+
+    async def notify_downloads(self) -> None:
+        """Wake the leader: a video waits to be downloaded."""
+        async with self.pool.acquire() as conn:
+            await self._notify(conn, {"downloads": True})
 
     async def restore_queued_videos(self) -> list[str]:
         """Safety net for queued songs whose video row went missing (evicted at
@@ -456,7 +440,7 @@ class Store:
 
     async def idle_rooms_with_ready_song(self) -> list[str]:
         """Rooms with nothing playing although a queued song is ready (a
-        replica died between finishing a download and starting the song)."""
+        leader died between finishing a download and starting the song)."""
         rows = await self.pool.fetch(
             """SELECT DISTINCT q.room_code FROM queue_items q
                JOIN videos v USING (video_id)
@@ -466,14 +450,12 @@ class Store:
         )
         return [r["room_code"] for r in rows]
 
-    async def downloads_to_resume(self) -> list[str]:
-        """Queued videos nobody is downloading: new, or whose worker died."""
+    async def pending_downloads(self) -> list[str]:
+        """Queued videos waiting to be downloaded, oldest request first."""
         rows = await self.pool.fetch(
-            """SELECT DISTINCT v.video_id FROM videos v
-               JOIN queue_items q USING (video_id)
-               WHERE v.status = 'pending' OR (v.status = 'downloading'
-                   AND v.heartbeat < now() - make_interval(secs => $1))""",
-            STALE_DOWNLOAD_SECONDS,
+            """SELECT v.video_id FROM videos v JOIN queue_items q USING (video_id)
+               WHERE v.status = 'pending'
+               GROUP BY v.video_id ORDER BY min(q.position)"""
         )
         return [r["video_id"] for r in rows]
 
@@ -494,7 +476,6 @@ class Store:
         """Forget the least recently played videos beyond the budget; the caller
         deletes the files. Videos still in a queue are kept."""
         async with self.pool.acquire() as conn, conn.transaction():
-            await conn.execute("SELECT pg_advisory_xact_lock($1)", EVICT_LOCK)
             rows = await conn.fetch(
                 """SELECT video_id, size FROM videos v WHERE status = 'ready'
                    AND NOT EXISTS (SELECT 1 FROM queue_items q

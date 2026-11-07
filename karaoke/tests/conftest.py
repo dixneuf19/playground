@@ -100,5 +100,5 @@ def client(make_settings: Callable[..., Settings]) -> Iterator[TestClient]:
     )
     with TestClient(app) as c:
         # No YouTube in unit tests: downloads never start.
-        c.app.state.hub.kick_download = lambda _video_id: None
+        c.app.state.hub.download_videos = False
         yield c
