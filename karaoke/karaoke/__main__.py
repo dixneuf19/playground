@@ -16,6 +16,7 @@ def main() -> None:
         port=int(os.environ.get("PORT", "8000")),
         proxy_headers=True,
         forwarded_allow_ips="*",
+        ws_max_size=64 * 1024,  # every message is small; refuse anything big
     )
 
 

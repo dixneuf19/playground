@@ -1,6 +1,7 @@
 """Room state: one host screen, many guest phones, one shared queue.
 
-Pure state, no I/O: the app layer runs downloads and broadcasts snapshots.
+Pure state, no I/O: karaoke.db loads a Room under a row lock, the app mutates
+it with these methods, and karaoke.db saves it back.
 """
 
 import secrets
@@ -8,6 +9,8 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Literal
+
+from karaoke.photos import Photo, PhotoQueue
 
 # No 0/O, 1/I/L: codes get typed from a TV across a dark room.
 CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
@@ -54,6 +57,14 @@ class Room:
     volume: float = 0.9
     sung: int = 0
     last_activity: float = field(default_factory=time.time)
+    photos: PhotoQueue = field(default_factory=PhotoQueue)
+    photo: Photo | None = None  # on screen right now
+    # When the photo slot changes next (shown photo ends / gap before the next)
+    photo_until: float | None = None
+    # Playback position of the current song, as last reported by a screen:
+    # `position` seconds at `position_at` (epoch), still running if playing.
+    position: float = 0.0
+    position_at: float | None = None
 
     def touch(self) -> None:
         self.last_activity = time.time()
@@ -80,12 +91,26 @@ class Room:
         self.queue.insert(index, item)
         return True
 
+    def played(self, now: float | None = None) -> float:
+        """Where the current song is now, extrapolated while it plays."""
+        if self.current is None:
+            return 0.0
+        if self.state == "playing" and self.position_at is not None:
+            now = time.time() if now is None else now
+            return self.position + max(0.0, now - self.position_at)
+        return self.position
+
+    def report_position(self, seconds: float, now: float | None = None) -> None:
+        self.position = max(0.0, seconds)
+        self.position_at = time.time() if now is None else now
+
     def advance(self) -> QueueItem | None:
         """Start the first ready song. Songs still downloading keep their place."""
         if self.current is not None:
             self.sung += 1
         self.current = None
         self.state = "idle"
+        self.position, self.position_at = 0.0, None
         for item in self.queue:
             if item.status == "ready":
                 self.queue.remove(item)
@@ -109,30 +134,11 @@ class Room:
             "state": self.state,
             "volume": self.volume,
             "sung": self.sung,
+            "position": round(self.played(), 2),
+            "photo": self.photo.to_dict() if self.photo else None,
+            "photos": [p.to_dict() for p in self.photos.upcoming()],
         }
 
 
-class RoomRegistry:
-    def __init__(self) -> None:
-        self._rooms: dict[str, Room] = {}
-
-    def create(self) -> Room:
-        self.prune()
-        while True:
-            code = "".join(secrets.choice(CODE_ALPHABET) for _ in range(CODE_LENGTH))
-            if code not in self._rooms:
-                break
-        room = Room(code=code)
-        self._rooms[code] = room
-        return room
-
-    def get(self, code: str) -> Room | None:
-        return self._rooms.get(code.upper())
-
-    def all(self) -> list[Room]:
-        return list(self._rooms.values())
-
-    def prune(self) -> None:
-        cutoff = time.time() - ROOM_TTL_SECONDS
-        for code in [c for c, r in self._rooms.items() if r.last_activity < cutoff]:
-            del self._rooms[code]
+def generate_code() -> str:
+    return "".join(secrets.choice(CODE_ALPHABET) for _ in range(CODE_LENGTH))

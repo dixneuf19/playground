@@ -16,12 +16,17 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 FROM python:3.13-slim-bookworm
 
-# ffmpeg merges the video and audio streams; deno solves YouTube's JS challenges.
+# ffmpeg merges the video and audio streams; deno solves YouTube's JS
+# challenges (the runtime yt-dlp enables by default: it runs that code with no
+# file or network access). Pinned so Renovate can bump it.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg curl unzip && \
-    curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh && \
-    apt-get purge -y curl unzip && apt-get autoremove -y && \
+    apt-get install -y --no-install-recommends ffmpeg && \
     rm -rf /var/lib/apt/lists/*
+COPY --from=denoland/deno:bin-2.9.8 /deno /usr/local/bin/deno
+
+# Not root. The shared /data volume must be writable by uid 1000.
+RUN useradd --uid 1000 --create-home karaoke && \
+    mkdir -p /data && chown karaoke:karaoke /data
 
 COPY --from=builder /app/.venv /app/.venv
 WORKDIR /app
@@ -32,4 +37,5 @@ ENV PATH="/app/.venv/bin:$PATH" \
 EXPOSE 8000
 VOLUME /data
 
+USER 1000
 CMD ["karaoke"]

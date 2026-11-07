@@ -1,6 +1,14 @@
 import pytest
 
-from karaoke.search import SearchResult, normalize, rank, split_title
+from karaoke.search import (
+    SearchResult,
+    is_strong,
+    normalize,
+    rank,
+    split_title,
+    video_id_from_url,
+    youtube_query,
+)
 
 
 @pytest.mark.parametrize(
@@ -58,3 +66,28 @@ def test_rank_matches_artist_and_title() -> None:
         _result("y", "Manhattan-Kaboul", "Renaud"),
     ]
     assert rank("renaud manhattan kaboul", results)[0].video_id == "y"
+
+
+def test_is_strong_needs_every_query_word() -> None:
+    assert is_strong("renaud manhattan", _result("y", "Manhattan-Kaboul", "Renaud"))
+    assert not is_strong(
+        "hotel california", _result("d", "Dani California", "Red Hot Chili Peppers")
+    )
+
+
+def test_youtube_query_asks_for_karaoke_versions() -> None:
+    assert youtube_query("hotel california") == "hotel california karaoke"
+    assert youtube_query("Hotel California karaoké") == "Hotel California karaoké"
+
+
+def test_video_id_from_pasted_links() -> None:
+    vid = "BHDc1pFFDz8"
+    for link in (
+        f"https://youtu.be/{vid}",
+        f"https://youtu.be/{vid}?si=abc",
+        f"https://www.youtube.com/watch?v={vid}&t=10",
+        f"https://m.youtube.com/watch?feature=share&v={vid}",
+        f"https://youtube.com/shorts/{vid}",
+    ):
+        assert video_id_from_url(link) == vid
+    assert video_id_from_url("hotel california") is None

@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import quote
 
 
 def _channels() -> list[str]:
@@ -31,9 +32,29 @@ class Settings:
         default_factory=lambda: int(os.environ.get("KARAOKE_MAX_HEIGHT", "720"))
     )
 
+    # Postgres: a full URL (local dev, tests) or the pieces (Kubernetes secret)
+    database_url: str = field(
+        default_factory=lambda: os.environ.get("KARAOKE_DATABASE_URL", "")
+    )
+
     @property
     def songs_dir(self) -> Path:
         return self.data_dir / "songs"
+
+    @property
+    def photos_dir(self) -> Path:
+        return self.data_dir / "photos"
+
+    def dsn(self) -> str:
+        if self.database_url:
+            return self.database_url
+        env = os.environ
+        user = quote(env.get("KARAOKE_DB_USER", "karaoke"), safe="")
+        password = quote(env.get("KARAOKE_DB_PASSWORD", ""), safe="")
+        host = env.get("KARAOKE_DB_HOST", "localhost")
+        port = env.get("KARAOKE_DB_PORT", "5432")
+        name = env.get("KARAOKE_DB_NAME", "karaoke")
+        return f"postgresql://{user}:{password}@{host}:{port}/{name}"
 
 
 settings = Settings()
