@@ -3,6 +3,9 @@
 Guide for coding agents. A KaraFun-like karaoke night for the owner's homelab, used
 by French-speaking friends, live at https://karaoke.dixneuf19.fr.
 
+TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
+(`gh issue list --label karaoke`). Close or update them as work lands.
+
 ## Product rules (keep them)
 
 - **All UI text is in French.** Code, comments and logs are in English.
@@ -165,8 +168,8 @@ Everything is deployed by ArgoCD from `~/codes/brassberry/brassberry-gitops`
   (`gitops/karaoke/karaoke/.argocd-source-karaoke.yaml`) → ArgoCD rolls the pods.
 - **Chart / config**: PR in the gitops repo. `gitops/karaoke/karaoke/` holds the
   base-helm-chart values (2 replicas, 1Gi limit: two parallel downloads
-  OOM-killed 512Mi; Traefik ingress karaoke.dixneuf19.fr; `karaoke-songs`
-  nfs-client RWX PVC on `/data`), `templates/pdb.yaml` and
+  OOM-killed 512Mi; Traefik ingress karaoke.dixneuf19.fr; `karaoke-data`
+  RWX PVC on `/data`, storage class `nfs-jonbonas`: the NAS), `templates/pdb.yaml` and
   `templates/database-credentials.yaml` (ESO SecretStore copying the DB
   credentials from namespace `playground-db`).
 - **Database**: `gitops/playground-db/playground-db/`, shared CNPG cluster
