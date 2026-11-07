@@ -19,11 +19,13 @@ def test_search_finds_french_catalogue() -> None:
 
 @pytest.mark.integration
 def test_download_produces_playable_mp4(tmp_path: Path) -> None:
-    library = Library(tmp_path, max_height=360, max_bytes=10**9)
+    library = Library(tmp_path, max_height=360)
     progress: list[float] = []
-    path = library.download("QkvTWXmcZEs", progress.append)
-    assert path.exists()
+    title, size = library.download("QkvTWXmcZEs", "test", progress.append)
+    path = library.path_for("QkvTWXmcZEs")
+    assert library.exists("QkvTWXmcZEs")
     assert path.read_bytes()[4:8] == b"ftyp"
-    assert library.has("QkvTWXmcZEs")
+    assert size == path.stat().st_size
+    assert title
     assert progress[-1] == 1.0
     assert progress == sorted(progress)

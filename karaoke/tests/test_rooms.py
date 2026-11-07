@@ -1,4 +1,11 @@
-from karaoke.rooms import CODE_ALPHABET, ItemStatus, QueueItem, Room, RoomRegistry
+from karaoke.rooms import (
+    CODE_ALPHABET,
+    CODE_LENGTH,
+    ItemStatus,
+    QueueItem,
+    Room,
+    generate_code,
+)
 
 
 def _item(name: str, status: ItemStatus = "ready") -> QueueItem:
@@ -8,12 +15,10 @@ def _item(name: str, status: ItemStatus = "ready") -> QueueItem:
 
 
 def test_codes_are_unambiguous() -> None:
-    registry = RoomRegistry()
     for _ in range(50):
-        room = registry.create()
-        assert len(room.code) == 4
-        assert set(room.code) <= set(CODE_ALPHABET)
-        assert registry.get(room.code.lower()) is room
+        code = generate_code()
+        assert len(code) == CODE_LENGTH
+        assert set(code) <= set(CODE_ALPHABET)
 
 
 def test_advance_skips_songs_still_downloading() -> None:
@@ -69,3 +74,16 @@ def test_remove() -> None:
     room.add(a)
     assert room.remove(a.id)
     assert not room.remove(a.id)
+
+
+def test_position_runs_while_playing_and_freezes_on_pause() -> None:
+    room = Room(code="ABCD", queue=[_item("a"), _item("b")])
+    room.advance()
+    assert room.played() == 0
+    room.report_position(30, now=1000)
+    assert room.played(now=1010) == 40
+    room.report_position(room.played(now=1010), now=1010)
+    room.state = "paused"
+    assert room.played(now=2000) == 40
+    room.advance()
+    assert room.played(now=2000) == 0

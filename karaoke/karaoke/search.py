@@ -62,6 +62,24 @@ def score(query: str, result: SearchResult) -> float:
     return overlap + difflib.SequenceMatcher(None, q, target).ratio()
 
 
+def is_strong(query: str, result: SearchResult) -> bool:
+    """Every word of the query appears in the song or artist."""
+    target = set(normalize(f"{result.title} {result.artist}").split())
+    return set(normalize(query).split()) <= target
+
+
+_VIDEO_ID = re.compile(
+    r"(?:youtu\.be/|youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|embed/|live/))"
+    r"([A-Za-z0-9_-]{11})"
+)
+
+
+def video_id_from_url(text: str) -> str | None:
+    """The video id when a YouTube link was pasted in the search box."""
+    m = _VIDEO_ID.search(text)
+    return m.group(1) if m else None
+
+
 def rank(query: str, results: list[SearchResult]) -> list[SearchResult]:
     seen: set[str] = set()
     unique = []
@@ -119,6 +137,29 @@ def search_channels(query: str, channels: list[str]) -> list[SearchResult]:
     return rank(query, [r for batch in batches for r in batch])
 
 
+def youtube_query(query: str) -> str:
+    """Bias towards karaoke versions: the plain query returns the clip."""
+    return query if "karaok" in normalize(query) else f"{query} karaoke"
+
+
 def search_youtube(query: str) -> list[SearchResult]:
-    entries = _extract(f"ytsearch{YOUTUBE_RESULTS}:{query}", YOUTUBE_RESULTS)
+    q = youtube_query(query)
+    entries = _extract(f"ytsearch{YOUTUBE_RESULTS}:{q}", YOUTUBE_RESULTS)
     return [r for e in entries if (r := _to_result(e, curated=False))]
+
+
+def lookup_video(video_id: str) -> list[SearchResult]:
+    """A single pasted link, resolved without searching."""
+    opts = {"quiet": True, "no_warnings": True, "skip_download": True}
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:  # type: ignore[arg-type]
+            info = ydl.extract_info(
+                f"https://www.youtube.com/watch?v={video_id}", download=False
+            )
+    except Exception:
+        logger.warning("Lookup failed for %s", video_id)
+        return []
+    if not info:
+        return []
+    r = _to_result({**info, "ie_key": "Youtube"}, curated=False)
+    return [r] if r else []

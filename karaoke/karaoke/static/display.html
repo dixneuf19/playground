@@ -95,6 +95,48 @@
     #gate .btn { font-size: 1.6em; padding: 1em 2em; }
     #gate p { margin-top: 1.5em; color: var(--muted); }
 
+    /* --- photos from phones (anonymous) --------------------------------- */
+    #photo {
+      position: fixed; z-index: 5; pointer-events: none;
+      font-size: 1vw; /* frame sizes in em scale with the screen */
+      opacity: 0; transition: opacity 0.5s ease;
+    }
+    #photo.show { opacity: 1; }
+    /* Instant-photo print: light paper, wider bottom edge, a strip of
+       pink → violet tape, a small random tilt per photo. */
+    #photo .frame {
+      position: relative;
+      padding: 0.9em 0.9em 3.2em;
+      background: linear-gradient(170deg, #fffdfb, #efe9f7);
+      border-radius: 0.35em;
+      box-shadow: 0 0.2em 0.4em rgba(0, 0, 0, 0.25), 0 1.6em 4em rgba(0, 0, 0, 0.55);
+      transform: rotate(var(--tilt, -2deg)) translateY(1.5em) scale(0.92);
+      transition: transform 0.7s cubic-bezier(0.2, 1.3, 0.4, 1);
+    }
+    #photo.show .frame { transform: rotate(var(--tilt, -2deg)); }
+    /* washi tape: translucent, faint stripes, torn ends */
+    #photo .frame::before {
+      content: ""; position: absolute; z-index: 1; top: -1.1em; left: 50%;
+      width: 9em; height: 3em; transform: translateX(-50%) rotate(-4deg);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 45%, rgba(0, 0, 0, 0.06)),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.07) 0 0.25em, transparent 0.25em 0.5em),
+        linear-gradient(90deg, rgba(255, 61, 139, 0.62), rgba(123, 92, 255, 0.62));
+      clip-path: polygon(0% 0.0%, 3% 16.7%, 0% 33.3%, 3% 50.0%, 0% 66.7%, 3% 83.3%, 0% 100.0%, 100% 100.0%, 97% 83.3%, 100% 66.7%, 97% 50.0%, 100% 33.3%, 97% 16.7%, 100% 0.0%);
+      backdrop-filter: blur(1px);
+      filter: drop-shadow(0 0.1em 0.15em rgba(0, 0, 0, 0.2));
+    }
+    #photo img { display: block; object-fit: contain; border-radius: 0.15em; background: #1a1230; }
+    /* during a song: rotates between three spots, never bottom-right (QR code) */
+    #photo.corner { font-size: 0.75vw; }
+    #photo.corner.pos-0 { top: 5vh; right: 3vw; }
+    #photo.corner.pos-1 { top: 13vh; left: 3vw; } /* below the singer badge */
+    #photo.corner.pos-2 { bottom: 6vh; left: 3vw; }
+    #photo.corner img { max-width: 28vw; max-height: 38vh; }
+    /* between songs: big, centred, over a dimmed backdrop */
+    #photo.center { inset: 0; display: grid; place-items: center; background: rgba(12, 7, 24, 0.75); }
+    #photo.center img { max-width: 64vw; max-height: 66vh; }
+
     #offline {
       position: fixed; top: 1em; left: 50%; transform: translateX(-50%); z-index: 30;
       background: var(--red); color: white; padding: 0.4em 1em; border-radius: 999px; font-weight: 600;
@@ -105,11 +147,12 @@
 </head>
 <body>
   <div id="offline">Connexion perdue… reconnexion</div>
+  <div id="photo"><div class="frame"><img alt=""></div></div>
 
   <div id="gate">
     <div>
       <button class="btn btn-primary" id="start">▶ Lancer la soirée</button>
-      <p>Clique une fois pour autoriser le son, puis <b>F</b> pour le plein écran.</p>
+      <p>Clique une fois pour autoriser le son, puis <b>F</b> pour le plein écran. <b>P</b> passe une photo.</p>
     </div>
   </div>
 
@@ -164,6 +207,8 @@
   let loadedId = null;
   let turnTimer = null;
   let unlocked = false;
+  let roomAt = 0; // when the last state arrived, to extrapolate `position`
+  const REWIND = 3; // seconds replayed on resume so the singer finds their place
 
   document.querySelectorAll(".qr").forEach((img) => (img.src = `/api/rooms/${ROOM_CODE}/qr.svg`));
   document.querySelectorAll(".room-code").forEach((el) => (el.textContent = ROOM_CODE));
@@ -182,7 +227,37 @@
 
   function onState(r) {
     room = r;
+    roomAt = Date.now();
     render();
+    renderPhoto();
+  }
+
+  // Never show who sent a photo: guessing is part of the fun.
+  let shownPhotoId = null;
+  const CORNERS = 3;
+  let cornerIndex = -1;
+  function renderPhoto() {
+    const el = $("photo");
+    const playing = !!room.current && !$("stage").classList.contains("hidden");
+    el.classList.toggle("corner", playing);
+    el.classList.toggle("center", !playing);
+    const p = room.photo;
+    if (!p) { el.classList.remove("show"); shownPhotoId = null; return; }
+    if (p.id === shownPhotoId) return;
+    shownPhotoId = p.id;
+    cornerIndex = (cornerIndex + 1) % CORNERS;
+    el.classList.remove("pos-0", "pos-1", "pos-2");
+    el.classList.add(`pos-${cornerIndex}`);
+    // a different small tilt for each photo, alternating sides
+    const tilt = (1.5 + Math.random() * 2.5) * (cornerIndex % 2 ? 1 : -1);
+    el.style.setProperty("--tilt", `${tilt.toFixed(1)}deg`);
+    el.classList.remove("show");
+    const img = el.querySelector("img");
+    img.onload = () => {
+      if (shownPhotoId !== p.id) return;
+      el.classList.add("show");
+    };
+    img.src = `/photos/${ROOM_CODE}/${p.id}`;
   }
 
   function render() {
@@ -200,11 +275,12 @@
       renderIdleQueue();
       return;
     }
-    if (cur.id !== loadedId && unlocked) startSong(cur);
+    if (cur.id !== loadedId && unlocked) startSong(cur, resumePoint());
     $("singer-name").textContent = cur.singer;
     $("stage").classList.toggle("paused", room.state === "paused");
     $("pausebadge").classList.toggle("hidden", room.state !== "paused" || !video.src);
     video.volume = room.volume;
+    syncPlayback();
     updateUpNext();
   }
 
@@ -226,7 +302,15 @@
     }
   }
 
-  function startSong(item) {
+  // Where the current song stands, from the server: 0 for a fresh song,
+  // further along when this screen was reloaded mid-song.
+  function resumePoint() {
+    let t = room.position || 0;
+    if (room.state === "playing" && t > 0) t += (Date.now() - roomAt) / 1000;
+    return t > REWIND ? t - REWIND : 0;
+  }
+
+  function startSong(item, resumeAt = 0) {
     loadedId = item.id;
     clearTimeout(turnTimer);
     video.pause();
@@ -235,6 +319,17 @@
     $("idle").classList.add("hidden");
     $("stage").classList.remove("hidden");
     document.body.classList.add("playing");
+
+    if (resumeAt > 0) {
+      // Reloaded mid-song: no announcement, straight back to where it was.
+      $("turn").classList.add("hidden");
+      video.addEventListener("loadedmetadata", () => {
+        if (loadedId !== item.id) return;
+        video.currentTime = Math.min(resumeAt, Math.max(0, video.duration - 1));
+        if (room.state !== "paused") video.play().catch(() => {});
+      }, { once: true });
+      return;
+    }
 
     $("turn-name").textContent = item.singer;
     $("turn-song").textContent = item.title;
@@ -260,6 +355,16 @@
     tick();
   }
 
+  // Play/pause also follow the state, not only the commands: a command lost
+  // while this screen was reconnecting is corrected on the next state push.
+  function syncPlayback() {
+    const cur = room.current;
+    if (!cur || cur.id !== loadedId || !video.src || video.readyState < 1) return;
+    if (!$("turn").classList.contains("hidden") || video.ended) return;
+    if (room.state === "paused" && !video.paused) video.pause();
+    else if (room.state === "playing" && video.paused) video.play().catch(() => {});
+  }
+
   function updateUpNext() {
     const next = room?.queue[0];
     const el = $("upnext");
@@ -272,12 +377,24 @@
   video.addEventListener("timeupdate", updateUpNext);
   video.addEventListener("ended", () => sock.send({ type: "ended", item_id: loadedId }));
   video.addEventListener("error", () => {
-    if (loadedId) setTimeout(() => sock.send({ type: "ended", item_id: loadedId }), 3000);
+    // Keep the id of the song that failed: by the time the timer fires,
+    // another song may be loaded and must not be skipped instead.
+    const failed = loadedId;
+    if (failed) setTimeout(() => sock.send({ type: "ended", item_id: failed }), 3000);
   });
-  video.addEventListener("play", () => sock.send({ type: "player", state: "playing" }));
+  video.addEventListener("play", () => sock.send({ type: "player", state: "playing", t: video.currentTime }));
   video.addEventListener("pause", () => {
-    if (!video.ended && $("turn").classList.contains("hidden")) sock.send({ type: "player", state: "paused" });
+    if (!video.ended && $("turn").classList.contains("hidden")) sock.send({ type: "player", state: "paused", t: video.currentTime });
   });
+  // Tell the server where the song is, so a reloaded screen picks it up.
+  function reportPosition() {
+    if (loadedId && video.src && !video.paused && !video.ended) {
+      sock.send({ type: "position", item_id: loadedId, t: video.currentTime });
+    }
+  }
+  setInterval(reportPosition, 5000);
+  video.addEventListener("seeked", reportPosition);
+  window.addEventListener("pagehide", reportPosition);
 
   function onCommand(cmd) {
     if (cmd.action === "pause") video.pause();
@@ -293,6 +410,8 @@
     } else if (e.key === " " && room?.current) {
       e.preventDefault();
       sock.send({ type: video.paused ? "play" : "pause" });
+    } else if ((e.key === "p" || e.key === "P") && room?.photo) {
+      sock.send({ type: "photo_skip" });
     } else if ((e.key === "n" || e.key === "ArrowRight") && room?.current) {
       sock.send({ type: "skip" });
     }

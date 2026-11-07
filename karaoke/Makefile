@@ -14,7 +14,13 @@ test:
 
 .PHONY: format check-format typecheck test
 
-dev:
-	KARAOKE_DATA_DIR=./data uv run karaoke
+LOCAL_DB = postgresql://postgres:karaoke@127.0.0.1:55432/postgres
 
-.PHONY: dev
+db:
+	docker start karaoke-db 2>/dev/null || docker run -d --name karaoke-db \
+		-e POSTGRES_PASSWORD=karaoke -p 127.0.0.1:55432:5432 postgres:18-alpine
+
+dev: db
+	KARAOKE_DATA_DIR=./data KARAOKE_DATABASE_URL=$(LOCAL_DB) uv run karaoke
+
+.PHONY: db dev

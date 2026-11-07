@@ -63,9 +63,14 @@
 
     .placeholder { text-align: center; padding: 48px 16px; color: var(--muted); }
     .placeholder .big { font-size: 2.6rem; margin-bottom: 8px; }
+    .intro-search { text-align: center; color: var(--muted); padding: 32px 8px 0; }
+    .intro-search .link-tip { margin-top: 28px; padding: 16px; border: 1px dashed var(--line); border-radius: 14px; }
+    .intro-search .link-tip b { color: var(--text, #fff); }
+    .paste-hint { font-size: .85rem; margin: 10px 0 0; }
     .skeleton { height: 74px; border-radius: var(--radius); background: linear-gradient(90deg, var(--surface) 0%, var(--surface-2) 50%, var(--surface) 100%); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
     @keyframes shimmer { to { background-position: -200% 0; } }
     .more { margin-top: 18px; text-align: center; }
+    .more.top { margin: 0 0 16px; padding: 14px; border: 1px dashed var(--line, rgba(255,255,255,.15)); border-radius: 14px; }
 
     /* queue */
     .qhead { display: flex; justify-content: space-between; align-items: baseline; margin: 4px 2px 10px; }
@@ -98,6 +103,23 @@
     .vol { display: flex; align-items: center; gap: 12px; max-width: 360px; margin: 0 auto; color: var(--muted); }
     input[type=range] { flex: 1; accent-color: var(--pink); height: 28px; }
     .stats { margin-top: 28px; font-size: 0.9rem; }
+
+    /* photos */
+    .intro { margin: 4px 2px 16px; font-size: .95rem; }
+    .pick { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
+      padding: 22px; border-radius: var(--radius); border: 2px dashed rgba(255, 61, 139, 0.45);
+      background: rgba(255, 61, 139, 0.06); font-weight: 700; font-size: 1.1rem; cursor: pointer; }
+    .pick:active { transform: scale(0.98); }
+    .sending { margin-top: 12px; display: flex; align-items: center; gap: 10px; color: var(--muted); }
+    .onscreen { display: flex; align-items: center; gap: 12px; padding: 12px; margin-bottom: 16px; }
+    .onscreen img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; flex: none; }
+    .onscreen .meta { flex: 1; min-width: 0; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .ph { position: relative; aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: var(--surface-2); }
+    .ph img { width: 100%; height: 100%; object-fit: cover; }
+    .ph .n { position: absolute; left: 6px; bottom: 6px; background: rgba(12, 7, 24, 0.75); padding: 2px 8px; border-radius: 999px; font-size: .75rem; font-weight: 700; }
+    .ph .x { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; border-radius: 50%; background: rgba(12, 7, 24, 0.75); font-size: .85rem; }
+    .section-title { margin: 22px 2px 10px; font-size: 1rem; display: flex; justify-content: space-between; align-items: baseline; }
 
     /* tab bar */
     nav {
@@ -140,10 +162,21 @@
       <div class="now card hidden" id="now-mini"></div>
       <form class="searchbar" id="search-form">
         <span class="icon">🔍</span>
-        <input class="field" id="q" type="search" placeholder="Titre ou artiste…" autocomplete="off" enterkeyhint="search">
+        <input class="field" id="q" type="search" placeholder="Titre, artiste ou lien YouTube…" autocomplete="off" enterkeyhint="search">
       </form>
       <div class="scope muted" id="scope"></div>
       <div class="list" id="results"></div>
+      <template id="search-intro">
+        <div class="intro-search">
+          <div class="big" style="font-size:2.6rem">🎶</div>
+          Cherche un titre ou un artiste dans le catalogue karaoké.
+          <div class="link-tip">
+            🔗 <b>Tu as déjà ta vidéo ?</b><br>
+            Colle son lien YouTube dans la barre de recherche.
+            <div style="margin-top:12px"><button class="btn btn-ghost" data-paste>📋 Coller un lien</button></div>
+          </div>
+        </div>
+      </template>
     </section>
 
     <!-- QUEUE -->
@@ -152,6 +185,18 @@
       <div class="qhead"><h2>File d'attente</h2><span class="muted" id="qcount"></span></div>
       <div class="list" id="queue"></div>
       <p class="muted" style="font-size:.85rem;text-align:center;margin-top:16px" id="qhint">Maintiens ⠿ et glisse pour réordonner.</p>
+    </section>
+
+    <!-- PHOTOS -->
+    <section class="view" id="view-photos">
+      <p class="muted intro">Tes photos passent sur le grand écran, une à la fois, <b>anonymement</b> 🤫. Celles de tout le monde sont mélangées : envoie-en autant que tu veux.</p>
+      <div class="card onscreen hidden" id="onscreen"></div>
+      <label class="pick" for="photo-input">📸 Choisir des photos</label>
+      <input type="file" id="photo-input" accept="image/*" multiple hidden>
+      <div class="sending hidden" id="sending"><span class="spinner"></span><span id="sending-text"></span></div>
+      <div class="section-title"><span>Mes photos en attente</span><span class="muted" id="photos-total" style="font-size:.85rem"></span></div>
+      <div class="grid" id="my-photos"></div>
+      <p class="muted hidden" id="no-photos" style="text-align:center;font-size:.9rem">Aucune photo en attente.</p>
     </section>
 
     <!-- STAGE -->
@@ -163,6 +208,7 @@
   <nav>
     <button data-view="search" class="active"><span class="ic">🔍</span>Chercher</button>
     <button data-view="queue"><span class="ic">🎶</span>File d'attente<span class="badge hidden" id="badge"></span></button>
+    <button data-view="photos"><span class="ic">📸</span>Photos<span class="badge hidden" id="photo-badge"></span></button>
     <button data-view="stage"><span class="ic">🎛️</span>Scène</button>
   </nav>
 
@@ -197,6 +243,8 @@
   let everywhere = false;
   let lastQuery = "";
   let results = [];
+  let strong = true;
+  let prefetched = null; // { q, promise } for the all-YouTube results
   let dragging = false;
   const added = new Set();
 
@@ -226,6 +274,11 @@
   // --- tabs ---------------------------------------------------------------
   document.querySelectorAll("nav button").forEach((b) => b.onclick = () => show(b.dataset.view));
   function show(view) {
+    // Leaving the search tab brings the next search back to the catalogue.
+    if (view !== "search" && everywhere) {
+      everywhere = false;
+      if (lastQuery) runSearch(); // same words, back in the catalogue
+    }
     document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
     document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
     window.scrollTo({ top: 0 });
@@ -257,9 +310,32 @@
   $("search-form").onsubmit = (e) => {
     e.preventDefault();
     $("q").blur();
-    everywhere = false;
-    runSearch();
+    runSearch(); // stays on all of YouTube until the tab changes
   };
+
+  function showIntro() {
+    $("scope").innerHTML = "";
+    $("results").replaceChildren($("search-intro").content.cloneNode(true));
+    $("results").querySelector("[data-paste]").onclick = pasteLink;
+  }
+  async function pasteLink() {
+    let text = "";
+    try { text = (await navigator.clipboard.readText()).trim(); } catch {}
+    if (!text) { $("q").focus(); toast("Colle le lien dans la barre de recherche"); return; }
+    $("q").value = text;
+    runSearch();
+  }
+  $("q").addEventListener("input", () => { if (!$("q").value.trim()) { lastQuery = ""; showIntro(); } });
+  showIntro();
+
+  async function fetchResults(q, all) {
+    try {
+      const res = await fetch(`/api/search?room=${ROOM_CODE}&q=${encodeURIComponent(q)}&everywhere=${all}`);
+      return await res.json();
+    } catch {
+      return { results: [], strong: false };
+    }
+  }
 
   async function runSearch() {
     const q = $("q").value.trim();
@@ -267,14 +343,20 @@
     lastQuery = q;
     $("scope").innerHTML = "";
     $("results").innerHTML = Array(5).fill('<div class="skeleton"></div>').join("");
-    try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&everywhere=${everywhere}`);
-      results = (await res.json()).results;
-    } catch {
-      results = [];
-    }
+    const data = everywhere && prefetched?.q === q
+      ? await prefetched.promise
+      : await fetchResults(q, everywhere);
     if (q !== lastQuery) return;
+    results = data.results;
+    strong = everywhere || data.strong !== false;
+    // Nothing matches every word: warm up YouTube so the button is instant.
+    if (!strong) prefetched = { q, promise: fetchResults(q, true) };
     renderResults();
+  }
+
+  function goEverywhere() {
+    everywhere = true;
+    runSearch();
   }
 
   function renderResults() {
@@ -299,25 +381,24 @@
         <button class="add ${added.has(r.video_id) ? "done" : ""}" data-i="${i}" aria-label="Ajouter">${added.has(r.video_id) ? "✓" : "+"}</button>
       </div>`).join("");
 
-    const empty = results.length ? "" : `
+    const top = everywhere || strong ? "" : `
+      <div class="more top">
+        <p class="muted" style="margin:0 0 10px;font-size:.9rem">Pas trouvé dans le catalogue karaoké.</p>
+        <button class="btn btn-primary" data-everywhere>Chercher sur YouTube</button>
+        <p class="muted paste-hint">ou colle directement le lien de la vidéo 🔗</p>
+      </div>`;
+    const empty = results.length || top ? "" : `
       <div class="placeholder"><div class="big">🤷</div>Rien trouvé${everywhere ? "" : " dans le catalogue karaoké"}.</div>`;
-    const more = everywhere ? "" : `
+    const more = everywhere || !strong ? "" : `
       <div class="more">
         <p class="muted" style="margin:0 0 10px;font-size:.9rem">Pas la bonne chanson ?</p>
-        <button class="btn btn-ghost" id="search-everywhere">Chercher sur tout YouTube</button>
+        <button class="btn btn-ghost" data-everywhere>Chercher sur tout YouTube</button>
+        <p class="muted paste-hint">ou colle directement le lien de la vidéo 🔗</p>
       </div>`;
-    $("results").innerHTML = rows + empty + more;
+    $("results").innerHTML = top + rows + empty + more;
 
     $("results").querySelectorAll(".add").forEach((b) => b.onclick = () => addSong(results[+b.dataset.i], b));
-    const ev = $("search-everywhere");
-    if (ev) ev.onclick = async () => {
-      const ok = await confirmSheet(
-        "Chercher sur tout YouTube ?",
-        "Ces vidéos ne viennent pas du catalogue karaoké : paroles absentes, voix pas retirée ou mauvaise qualité possibles.",
-        "Chercher quand même",
-      );
-      if (ok) { everywhere = true; runSearch(); }
-    };
+    $("results").querySelectorAll("[data-everywhere]").forEach((b) => b.onclick = goEverywhere);
   }
 
   async function addSong(r, btn) {
@@ -341,6 +422,7 @@
     renderNow();
     if (!dragging) renderQueue();
     renderStage();
+    renderPhotos();
     const n = room.queue.length;
     $("badge").textContent = n;
     $("badge").classList.toggle("hidden", !n);
@@ -432,6 +514,93 @@
       if (await confirmSheet("Passer la chanson ?", `${c.singer} est en train de chanter « ${c.title} ».`, "Passer")) sock.send({ type: "skip" });
     };
     $("c-vol").onchange = (e) => sock.send({ type: "volume", value: +e.target.value });
+  }
+  // --- photos -------------------------------------------------------------
+  // The server never says who sent a photo: each phone remembers its own ids.
+  const MY_PHOTOS_KEY = `karaoke.photos.${ROOM_CODE}`;
+  const myPhotos = new Set(JSON.parse(localStorage.getItem(MY_PHOTOS_KEY) || "[]"));
+  const previews = new Map();  // photo id -> local object URL
+  const saveMine = () => localStorage.setItem(MY_PHOTOS_KEY, JSON.stringify([...myPhotos]));
+  const MAX_SIDE = 1920;
+
+  async function shrink(file) {
+    // Big phone photos (5-10 MB) would crawl over 4G: resize to ~300 KB JPEG.
+    try {
+      const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+      const scale = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(bmp.width * scale);
+      canvas.height = Math.round(bmp.height * scale);
+      canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      bmp.close?.();
+      return await new Promise((ok) => canvas.toBlob(ok, "image/jpeg", 0.85));
+    } catch {
+      return file;  // let the server judge (JPEG/PNG/WebP accepted)
+    }
+  }
+
+  $("photo-input").onchange = async (e) => {
+    const files = [...e.target.files];
+    e.target.value = "";
+    if (!files.length) return;
+    if (!me) { askName(); return; }
+    let sent = 0, failed = 0, lastError = "";
+    $("sending").classList.remove("hidden");
+    for (const [i, file] of files.entries()) {
+      $("sending-text").textContent = `Envoi ${i + 1}/${files.length}…`;
+      const blob = await shrink(file);
+      try {
+        const res = await fetch(`/api/rooms/${ROOM_CODE}/photos?uploader=${encodeURIComponent(me)}`, {
+          method: "POST", headers: { "Content-Type": blob.type || "application/octet-stream" }, body: blob,
+        });
+        if (!res.ok) { failed++; lastError = (await res.json().catch(() => ({}))).detail || ""; continue; }
+        const { id } = await res.json();
+        myPhotos.add(id);
+        previews.set(id, URL.createObjectURL(blob));
+        sent++;
+      } catch { failed++; }
+    }
+    saveMine();
+    $("sending").classList.add("hidden");
+    if (sent) toast(`${sent} photo${sent > 1 ? "s" : ""} envoyée${sent > 1 ? "s" : ""} 📸`);
+    if (failed) toast(`${failed} échec${failed > 1 ? "s" : ""}${lastError ? " : " + lastError : ""}`);
+    renderPhotos();
+  };
+
+  function photoSrc(id) { return previews.get(id) || `/photos/${ROOM_CODE}/${id}`; }
+
+  function renderPhotos() {
+    if (!room) return;
+    const upcoming = room.photos.map((p) => p.id);
+    const live = new Set(upcoming);
+    if (room.photo) live.add(room.photo.id);
+    // Forget ids that were shown or cancelled.
+    for (const id of [...myPhotos]) if (!live.has(id)) { myPhotos.delete(id); previews.delete(id); }
+    saveMine();
+
+    const mine = upcoming.map((id, idx) => ({ id, pos: idx + 1 })).filter((p) => myPhotos.has(p.id));
+    $("photos-total").textContent = upcoming.length ? `${upcoming.length} au total` : "";
+    $("photo-badge").textContent = mine.length;
+    $("photo-badge").classList.toggle("hidden", !mine.length);
+    $("no-photos").classList.toggle("hidden", mine.length > 0);
+    $("my-photos").innerHTML = mine.map((p) => `
+      <div class="ph">
+        <img src="${esc(photoSrc(p.id))}" alt="" loading="lazy">
+        <span class="n">${p.pos === 1 ? "la suivante" : "n°" + p.pos}</span>
+        <button class="x" data-photo="${p.id}" aria-label="Annuler">✕</button>
+      </div>`).join("");
+    $("my-photos").querySelectorAll("[data-photo]").forEach((b) => b.onclick = () =>
+      sock.send({ type: "photo_remove", photo_id: b.dataset.photo, uploader: me }));
+
+    const cur = room.photo;
+    $("onscreen").classList.toggle("hidden", !cur);
+    if (cur) {
+      $("onscreen").innerHTML = `
+        <img src="${esc(photoSrc(cur.id))}" alt="">
+        <div class="meta"><b>À l'écran</b><div class="muted" style="font-size:.9rem">${myPhotos.has(cur.id) ? "C'est la tienne 🤫" : "Une photo de quelqu'un…"}</div></div>
+        <button class="btn btn-ghost" id="photo-skip">Passer</button>`;
+      $("photo-skip").onclick = () => sock.send({ type: "photo_skip" });
+    }
   }
 </script>
 </body>
