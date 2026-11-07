@@ -19,10 +19,9 @@ by French-speaking friends, live at https://karaoke.dixneuf19.fr.
 - **Cancelled artists** (`cancelled.py`, `CANCELLED_ARTISTS`) stay playable but are
   flagged; the phone asks for a "J'assume" confirmation. The flag is computed
   server-side, never trusted from the phone. User-suggested cancellations: future.
-- **Photos are anonymous on purpose** (guessing who sent one is the fun). Never
-  expose the uploader in state, on the screen, or anywhere a client can read it.
-  Phones remember their own photo ids in localStorage. Cancelling a photo only
-  checks the uploader *name*: deliberately loose, friends may mess with each other.
+- **The screen doesn't show who sent a photo** (a product choice, not a security
+  property). Phones keep their own photo ids in localStorage to list their photos
+  still in the queue and cancel them.
 - **Photo fairness, not FIFO** (`photos.PhotoQueue`): next photo comes from the
   uploader shown least recently; never-shown uploaders first; ties by upload order.
   One photo at a time, 10 s, tilted instant-photo print with washi tape; rotating
@@ -145,41 +144,41 @@ anyone can create a room), `PORT`, `LOG_LEVEL`.
   runs two app instances on one database: extend it for cross-replica behaviour.
 - `-m integration` hits YouTube; run it after touching search or download code.
 
-## Deploy (owner's workflow)
+## Deploy (gitops)
 
-Iterate without a git round-trip; do not commit or push unless asked.
+Everything is deployed by ArgoCD from `~/codes/brassberry/brassberry-gitops`
+(k0s homelab cluster: arm64 Raspberry Pis + one amd64 worker):
+
+- **App code**: merge to `main` here → `.github/workflows/karaoke-docker.yml`
+  builds `ghcr.io/dixneuf19/karaoke:main` for amd64 + arm64 → ArgoCD Image
+  Updater sees the new digest, commits it to the gitops repo
+  (`gitops/karaoke/karaoke/.argocd-source-karaoke.yaml`) → ArgoCD rolls the pods.
+- **Chart / config**: PR in the gitops repo. `gitops/karaoke/karaoke/` holds the
+  base-helm-chart values (2 replicas, 1Gi limit: two parallel downloads
+  OOM-killed 512Mi; Traefik ingress karaoke.dixneuf19.fr; `karaoke-songs`
+  nfs-client RWX PVC on `/data`), `templates/pdb.yaml` and
+  `templates/database-credentials.yaml` (ESO SecretStore copying the DB
+  credentials from namespace `playground-db`).
+- **Database**: `gitops/playground-db/playground-db/`, shared CNPG cluster
+  `playground` (host `playground-rw.playground-db.svc`, one instance on
+  k8s-worker-1, barman-cloud backups to S3). Each key of `databases:` gets a
+  generated password, a role and a database.
+- ArgoCD apps `karaoke` and `playground-db` are in `gitops/argocd/apps/values.yaml`
+  (automated sync with selfHeal: a manual `helm upgrade` or `kubectl edit` is
+  reverted). Image Updater config:
+  `gitops/argocd/argocd-image-updater/templates/image-updaters.yaml`.
+
+Quick iteration without a merge (owner's habit, don't commit or push unless
+asked): push the image yourself, Image Updater picks up the new `:main` digest
+within a few minutes. Pods run on any node, so the image must be multi-arch; an
+amd64-only push breaks pods on the Pis. Building arm64 locally needs QEMU
+emulation installed once (`docker run --privileged --rm tonistiigi/binfmt
+--install arm64`).
 
 ```bash
 make check-format typecheck test
 docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/dixneuf19/karaoke:main --push .
-kubectl -n karaoke rollout restart deploy/karaoke
 ```
-
-Pods run on any node (arm64 Raspberry Pis and the amd64 worker), so the image
-must be multi-arch: an amd64-only push breaks pods on the Pis. Building arm64
-locally needs QEMU emulation installed once
-(`docker run --privileged --rm tonistiigi/binfmt --install arm64`).
-`.github/workflows/karaoke-docker.yml` builds both and pushes `:main` on every
-push to main; Image Updater then pins that digest.
-
-When chart values change: `make deploy` in the gitops chart directory
-(`helm upgrade --install -n karaoke karaoke . -f values.yaml`).
-
-## Gitops (`~/codes/brassberry/brassberry-gitops`)
-
-- `gitops/karaoke/karaoke/`: base-helm-chart values (2 replicas, 1Gi limit: two
-  parallel downloads with yt-dlp + deno + ffmpeg OOM-killed a 512Mi pod,
-  Traefik ingress karaoke.dixneuf19.fr, `karaoke-songs` nfs-client RWX PVC on
-  `/data`), `templates/pdb.yaml` (minAvailable 1), `templates/database-credentials.yaml`
-  (ESO SecretStore copying the DB credentials from namespace `playground-db`).
-- `gitops/playground-db/playground-db/`: shared CNPG cluster `playground`
-  (host `playground-rw.playground-db.svc`), one instance on k8s-worker-1,
-  barman-cloud backups to S3. Each entry of `databases:` gets a generated password,
-  a role and a database.
-- ArgoCD Application `karaoke` is in `gitops/argocd/apps/values.yaml` (defaults:
-  automated sync, selfHeal, prune); Image Updater tracks the `:main` digest in
-  `gitops/argocd/argocd-image-updater/templates/image-updaters.yaml`. A manual
-  helm upgrade that differs from git main can be reverted by ArgoCD.
 
 ## Key decisions
 
