@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from karaoke.cancelled import cancel_reason
 
 MAX_FAVOURITES = 500  # stored; public site, so bounded
-MAX_SHOWN = 50  # the most played ones, on the phone's Favoris tab
 # Share of KARAOKE_CACHE_MAX_GB past which other videos are evicted;
 # favourites are evicted only past the whole of it.
 NON_FAVOURITE_SHARE = 0.8
