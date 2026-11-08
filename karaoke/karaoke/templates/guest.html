@@ -62,9 +62,12 @@
   <div class="sheet{{ ' hidden' if me }}" id="name-sheet">
     <form class="card" id="name-form">
       <h2>Salut ! 👋</h2>
-      <p class="muted">Ton prénom s'affichera à l'écran quand ce sera ton tour.</p>
-      <input class="field" id="name-input" maxlength="40" placeholder="Ton prénom" autocomplete="given-name" required value="{{ me }}">
-      <div class="actions"><button class="btn btn-primary" type="submit">C'est parti</button></div>
+      <p class="muted">
+        Ton prénom s'affichera à l'écran quand ce sera ton tour.
+        {% if suggested and not me %}Garde celui de la dernière fois ou change-le pour cette soirée.{% endif %}
+      </p>
+      <input class="field" id="name-input" maxlength="40" placeholder="Ton prénom" autocomplete="given-name" required value="{{ suggested }}">
+      <div class="actions"><button class="btn btn-primary" type="submit">{{ "C'est moi" if suggested and not me else "C'est parti" }}</button></div>
     </form>
   </div>
 

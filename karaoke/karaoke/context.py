@@ -16,8 +16,18 @@ from karaoke.photo_files import PhotoFiles
 from karaoke.search import Searcher
 from karaoke.worker import Worker
 
-NAME_COOKIE = "karaoke_name"
+# The name confirmed for a room lives in a cookie of its own; the last name
+# used anywhere is only offered as a suggestion when joining another room.
+LAST_NAME_COOKIE = "karaoke_name"
 MAX_NAME = 40
+
+
+def room_cookie(code: str) -> str:
+    return f"karaoke_name_{code.upper()}"
+
+
+def _cookie(conn: HTTPConnection, key: str) -> str:
+    return unquote(conn.cookies.get(key, "")).strip()[:MAX_NAME]
 
 
 @dataclass
@@ -37,9 +47,16 @@ def services(conn: HTTPConnection) -> Services:
 
 
 def guest_name(conn: HTTPConnection) -> str:
-    """The name the phone picked, kept in a cookie (set by guest.js)."""
-    return unquote(conn.cookies.get(NAME_COOKIE, "")).strip()[:MAX_NAME]
+    """The name the phone confirmed for this room (set by guest.js), or ""."""
+    code = conn.path_params.get("code", "")
+    return _cookie(conn, room_cookie(code)) if code else ""
+
+
+def last_name(conn: HTTPConnection) -> str:
+    """The name this phone used last, in any room: a suggestion only."""
+    return _cookie(conn, LAST_NAME_COOKIE)
 
 
 Svc = Annotated[Services, Depends(services)]
 GuestName = Annotated[str, Depends(guest_name)]
+LastName = Annotated[str, Depends(last_name)]

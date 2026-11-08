@@ -23,9 +23,14 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   flagged; the phone asks for a "J'assume" confirmation. The flag is computed
   server-side, never trusted from the phone. User-suggested cancellations: future.
 - **The screen doesn't show who sent a photo** (a product choice, not a security
-  property). A guest is known by the name in their `karaoke_name` cookie: the
-  phone page lists and cancels the pending photos uploaded under that name, and
-  tags their songs "moi". Same-name guests share them (issue #55).
+  property). A guest is known by the name confirmed for that room, in the
+  `karaoke_name_<CODE>` cookie: the phone page lists and cancels the pending
+  photos uploaded under that name, and tags their songs "moi". Same-name guests
+  share them (issue #55).
+- **A name is confirmed per room.** Entering a room opens the name sheet,
+  prefilled with the last name used anywhere (`karaoke_name` cookie, a
+  suggestion only); the guest confirms or changes it. Tapping the name in the
+  header changes it for this room.
 - **Photo fairness, not FIFO** (`photos.PhotoQueue`): next photo comes from the
   uploader shown least recently; never-shown uploaders first; ties by upload order.
   One photo at a time, 10 s, tilted instant-photo print with washi tape; rotating

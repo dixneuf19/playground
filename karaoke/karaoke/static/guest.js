@@ -4,7 +4,11 @@
 // confirmation sheets, toasts, drag and drop, resizing photos before upload.
 const $ = (id) => document.getElementById(id);
 const CODE = document.body.dataset.code;
-const NAME_COOKIE = "karaoke_name";
+// The name confirmed for this room; the last one used anywhere is only a
+// suggestion, prefilled by the server when joining another room.
+const NAME_COOKIE = `karaoke_name_${CODE}`;
+const LAST_NAME_COOKIE = "karaoke_name";
+const ROOM_COOKIE_AGE = 2 * 24 * 3600; // rooms expire after a day
 
 // A push never fights a finger on the volume slider.
 Idiomorph.defaults.callbacks.beforeNodeMorphed = (old) =>
@@ -16,14 +20,13 @@ function cookieName() {
   return m ? decodeURIComponent(m[1]) : "";
 }
 function saveName(name) {
-  document.cookie = `${NAME_COOKIE}=${encodeURIComponent(name)}; path=/; max-age=31536000; samesite=lax`;
-  localStorage.setItem("karaoke.name", name);
+  const value = encodeURIComponent(name);
+  document.cookie = `${NAME_COOKIE}=${value}; path=/; max-age=${ROOM_COOKIE_AGE}; samesite=lax`;
+  document.cookie = `${LAST_NAME_COOKIE}=${value}; path=/; max-age=31536000; samesite=lax`;
 }
-// Phones that picked a name before it moved to a cookie keep it.
-if (!cookieName() && localStorage.getItem("karaoke.name")) {
-  saveName(localStorage.getItem("karaoke.name"));
-  location.reload();
-}
+// Phones that picked a name before cookies: suggest it, still to confirm.
+const legacyName = localStorage.getItem("karaoke.name");
+if (legacyName && !$("name-input").value) $("name-input").value = legacyName;
 function askName() {
   $("name-sheet").classList.remove("hidden");
   setTimeout(() => $("name-input").focus(), 50);

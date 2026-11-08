@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from karaoke.api import room_or_404
 from karaoke.cancelled import cancel_reason
-from karaoke.context import GuestName, Svc
+from karaoke.context import GuestName, LastName, Svc
 from karaoke.messages import Add, parse
 from karaoke.views import guest_state, render_guest_state, templates
 
@@ -34,7 +34,9 @@ async def display(code: str, request: Request, svc: Svc) -> HTMLResponse:
 
 
 @router.get("/r/{code}", response_class=HTMLResponse)
-async def guest(code: str, request: Request, svc: Svc, me: GuestName) -> HTMLResponse:
+async def guest(
+    code: str, request: Request, svc: Svc, me: GuestName, last: LastName
+) -> HTMLResponse:
     room = await svc.store.load_room(code)
     if room is None:
         raise HTTPException(404, "Salle introuvable")
@@ -43,6 +45,7 @@ async def guest(code: str, request: Request, svc: Svc, me: GuestName) -> HTMLRes
         "guest.html",
         **guest_state(room, me),
         oob=False,
+        suggested=me or last,
         code=room.code,
         page=await svc.searcher.find("", everywhere=False),
         initial=True,  # the search intro, inside the page
