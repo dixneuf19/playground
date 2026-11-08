@@ -50,6 +50,13 @@ class PhotoQueue:
                 return p
         return None
 
+    def rename(self, old: str, new: str) -> bool:
+        """A guest changed name: their pending photos follow them."""
+        mine = [p for p in self.pending if p.uploader == old]
+        for p in mine:
+            p.uploader = new
+        return bool(mine)
+
     def _priority(self, photo: Photo) -> tuple[int, int]:
         return (self.last_shown.get(photo.uploader, -1), photo.seq)
 

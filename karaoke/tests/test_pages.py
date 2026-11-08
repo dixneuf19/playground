@@ -3,15 +3,18 @@ pushed over the WebSocket."""
 
 import json
 import re
+from collections.abc import Callable
 from urllib.parse import quote
 
 import pytest
 from fastapi.testclient import TestClient
 
 from karaoke import db
+from karaoke.app import create_app
+from karaoke.config import Settings
 from karaoke.reactions import ROOM_EMOJI_BURST
 from karaoke.search import SearchResult
-from tests.conftest import freeze_reactions, services
+from tests.conftest import claim, freeze_reactions, phone, services
 
 JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 100
 VID = "abcdefghijk"
@@ -21,25 +24,10 @@ def _room(client: TestClient) -> str:
     return client.post("/api/rooms", json={"password": "secret"}).json()["code"]
 
 
-def _as(client: TestClient, code: str, name: str) -> TestClient:
-    """Claim the name in the room, as the name sheet does (the client is one
-    phone: claiming another name releases the previous one)."""
-    res = client.post(f"/r/{code}/name", data={"name": name})
-    assert res.status_code == 204, res.text
-    return client
-
-
-def _phone(client: TestClient) -> TestClient:
-    """Another phone in the same app: its own cookies, the same event loop."""
-    phone = TestClient(client.app)
-    phone.portal = client.portal
-    return phone
-
-
 def test_page_asks_for_a_name_until_it_has_one(client: TestClient) -> None:
     code = _room(client)
     assert 'class="sheet" id="name-sheet"' in client.get(f"/r/{code}").text
-    page = _as(client, code, "Léa").get(f"/r/{code}").text
+    page = claim(client, code, "Léa").get(f"/r/{code}").text
     assert 'class="sheet hidden" id="name-sheet"' in page
     assert "🎤 <span>Léa</span>" in page
     assert f'hx-ws:connect="/ws/{code}?role=guest&view=html"' in page
@@ -50,7 +38,7 @@ def test_the_name_is_per_room_and_the_last_one_only_suggested(
     client: TestClient,
 ) -> None:
     first, second = _room(client), _room(client)
-    _as(client, first, "Léa")
+    claim(client, first, "Léa")
     client.cookies.set("karaoke_name", quote("Léa"))  # last name used
     assert "🎤 <span>Léa</span>" in client.get(f"/r/{first}").text
     page = client.get(f"/r/{second}").text
@@ -69,7 +57,7 @@ def test_photos_belong_to_the_name_confirmed_in_that_room(
     client: TestClient,
 ) -> None:
     first, second = _room(client), _room(client)
-    _as(client, first, "Léa")
+    claim(client, first, "Léa")
     client.cookies.set("karaoke_name", quote("Léa"))  # last name used
     # The room cookie beats a forged ?uploader=
     client.post(f"/api/rooms/{first}/photos?uploader=Tom", content=JPEG)
@@ -83,13 +71,13 @@ def test_photos_belong_to_the_name_confirmed_in_that_room(
     theirs = client.post(f"/api/rooms/{second}/photos", content=JPEG).json()["id"]
     assert theirs not in client.get(f"/r/{second}/state").text
     client.post(f"/r/{second}/do", data={"type": "photo_remove", "photo_id": theirs})
-    _as(client, second, "Anonyme")
+    claim(client, second, "Anonyme")
     assert f'id="ph-{theirs}"' in client.get(f"/r/{second}/state").text
 
 
 def test_add_takes_the_singer_from_the_cookie(client: TestClient) -> None:
     code = _room(client)
-    res = _as(client, code, "Léa").post(
+    res = claim(client, code, "Léa").post(
         f"/r/{code}/do",
         data={"type": "add", "video_id": VID, "title": "Song", "singer": "Liar"},
     )
@@ -105,7 +93,7 @@ def test_add_takes_the_singer_from_the_cookie(client: TestClient) -> None:
 
 def test_reactions_from_the_phone_page(client: TestClient) -> None:
     code = _room(client)
-    page = _as(client, code, "Léa").get(f"/r/{code}").text
+    page = claim(client, code, "Léa").get(f"/r/{code}").text
     assert 'data-react="fire"' in page and 'data-react="confetti"' in page
     # effects are emoji-only buttons too, named for screen readers
     assert 'aria-label="Confettis">🎉</button>' in page
@@ -141,7 +129,7 @@ def test_a_new_name_cookie_per_request_cannot_flood_the_room(
     with client.websocket_connect(f"/ws/{code}?role=display") as screen:
         screen.receive_json()
         for n in range(20):  # a script rotating names: a fresh sender each time
-            _as(client, code, f"bot-{n}").post(
+            claim(client, code, f"bot-{n}").post(
                 do, data={"type": "react", "kind": "fire", "count": 10}
             )
         client.post(do, data={"type": "volume", "value": 0.5})  # NOTIFYs keep order
@@ -159,7 +147,7 @@ def test_a_new_name_cookie_per_request_cannot_flood_the_room(
 
 def test_pushed_fragments_are_personal_and_escaped(client: TestClient) -> None:
     code = _room(client)
-    _as(client, code, "Léa")
+    claim(client, code, "Léa")
     with client.websocket_connect(f"/ws/{code}?view=html") as lea:
         first = lea.receive_text()
         assert 'id="queue-panel" hx-swap-oob="outerMorph"' in first
@@ -170,25 +158,24 @@ def test_pushed_fragments_are_personal_and_escaped(client: TestClient) -> None:
         pushed = lea.receive_text()
     assert "&lt;script&gt;" in pushed and "<script>" not in pushed
     assert "tag-me" in pushed  # her own song
-    _as(client, code, "Tom")
-    assert "tag-me" not in client.get(f"/r/{code}/state").text
+    tom = claim(phone(client), code, "Tom")
+    assert "tag-me" not in tom.get(f"/r/{code}/state").text
 
 
 def test_only_the_uploader_sees_their_waiting_photos(client: TestClient) -> None:
     code = _room(client)
     url = f"/api/rooms/{code}/photos"
-    _as(client, code, "Léa")
+    claim(client, code, "Léa")
     client.post(url, content=JPEG)  # goes on screen
     waiting = client.post(url, content=JPEG).json()["id"]
     assert f'id="ph-{waiting}"' in client.get(f"/r/{code}/state").text
-    _as(client, code, "Tom")
-    assert waiting not in client.get(f"/r/{code}/state").text
-    # Tom can't cancel it: the uploader is the cookie, not the form
-    client.post(
+    tom = claim(phone(client), code, "Tom")
+    assert waiting not in tom.get(f"/r/{code}/state").text
+    # Tom can't cancel it: the uploader is his phone's name, not the form
+    tom.post(
         f"/r/{code}/do",
         data={"type": "photo_remove", "photo_id": waiting, "uploader": "Léa"},
     )
-    _as(client, code, "Léa")
     assert f'id="ph-{waiting}"' in client.get(f"/r/{code}/state").text
     client.post(f"/r/{code}/do", data={"type": "photo_remove", "photo_id": waiting})
     assert waiting not in client.get(f"/r/{code}/state").text
@@ -212,7 +199,7 @@ def test_search_renders_results(client: TestClient) -> None:
     setattr(services(client).searcher, "_search", fake)  # noqa: B010
     code = _room(client)
     html = (
-        _as(client, code, "Léa")
+        claim(client, code, "Léa")
         .get(f"/r/{code}/search", params={"q": "connemara"})
         .text
     )
@@ -241,7 +228,7 @@ def _tag(page: str, element_id: str) -> tuple[str, set[str]]:
 
 def test_the_queue_tab_holds_the_player(client: TestClient) -> None:
     code = _room(client)
-    page = _as(client, code, "Léa").get(f"/r/{code}").text
+    page = claim(client, code, "Léa").get(f"/r/{code}").text
     assert 'data-view="stage"' not in page and 'id="stage"' not in page
     assert "hidden" in _tag(page, "player")[1]  # empty room: nothing to show
 
@@ -286,7 +273,7 @@ def test_search_intro_shows_popular_songs(client: TestClient) -> None:
         svc.store.finish_download, VID, True, "Les lacs du Connemara - Michel Sardou", 1
     )
     code = _room(client)
-    _as(client, code, "Léa")
+    claim(client, code, "Léa")
     assert "Les plus chantées" not in client.get(f"/r/{code}").text
 
     # Ready, so it starts at once: that's a play
@@ -312,46 +299,56 @@ def test_search_intro_shows_popular_songs(client: TestClient) -> None:
 
 def test_a_name_belongs_to_one_phone(client: TestClient) -> None:
     code = _room(client)
-    _as(client, code, "Léa")
+    claim(client, code, "Léa")
     client.post(f"/api/rooms/{code}/photos", content=JPEG)  # goes on screen
     waiting = client.post(f"/api/rooms/{code}/photos", content=JPEG).json()["id"]
-    other = _phone(client)
+    other = phone(client)
     res = other.post(f"/r/{code}/name", data={"name": "Léa"})
     assert res.status_code == 409
     assert res.json() == {
-        "detail": "« Léa » est déjà pris dans cette salle",
+        "detail": "«\u00a0Léa\u00a0» est déjà pris dans cette salle",
         "suggestion": "Léa 2",
     }
     # Not normalized: another spelling is another name
-    _as(other, code, "léa")
+    claim(other, code, "léa")
     assert waiting not in other.get(f"/r/{code}/state").text
-    _as(other, code, "Léa 2")
+    claim(other, code, "Léa 2")
     res = other.post(f"/r/{code}/name", data={"name": "Léa"})
     assert res.json()["suggestion"] == "Léa 3"
     assert other.post(f"/r/{code}/name", data={"name": " "}).status_code == 422
     assert other.post("/r/ZZZZ/name", data={"name": "x"}).status_code == 404
 
 
-def test_renaming_frees_the_previous_name(client: TestClient) -> None:
+def test_renaming_takes_songs_and_photos_along(client: TestClient) -> None:
     code = _room(client)
-    _as(client, code, "Léa")
-    _as(client, code, "Lou")
-    _as(_phone(client), code, "Léa")
-    assert "🎤 <span>Lou</span>" in client.get(f"/r/{code}").text
+    claim(client, code, "Léa")
+    client.post(f"/api/rooms/{code}/photos", content=JPEG)  # goes on screen
+    waiting = client.post(f"/api/rooms/{code}/photos", content=JPEG).json()["id"]
+    client.post(f"/r/{code}/do", data={"type": "add", "video_id": VID})
+    claim(client, code, "Lou")
+    page = client.get(f"/r/{code}").text
+    assert "🎤 <span>Lou</span>" in page
+    assert f'id="ph-{waiting}"' in page and "tag-me" in page
+    room = client.get(f"/api/rooms/{code}").json()
+    assert [i["singer"] for i in room["queue"]] == ["Lou"]
+    # The old name is free at once, and comes with nothing
+    other = claim(phone(client), code, "Léa")
+    state = other.get(f"/r/{code}/state").text
+    assert waiting not in state and "tag-me" not in state
 
 
 def test_a_gone_phone_releases_its_name(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     code = _room(client)
-    _as(client, code, "Léa")
+    claim(client, code, "Léa")
     client.post(f"/api/rooms/{code}/photos", content=JPEG)  # goes on screen
     waiting = client.post(f"/api/rooms/{code}/photos", content=JPEG).json()["id"]
     monkeypatch.setattr(db, "NAME_RELEASE_SECONDS", -1)  # gone long enough
-    other = _phone(client)
+    other = phone(client)
     with client.websocket_connect(f"/ws/{code}?view=html") as lea:
         assert 'data-me="Léa"' in lea.receive_text()
-        _as(other, code, "Léa")  # a new phone simply takes it
+        claim(other, code, "Léa")  # a new phone simply takes it
         pushed = lea.receive_text()
     # The old phone lost the name on the next push; the new one has its photos
     assert 'data-me=""' in pushed and "🎤 <span>?</span>" in pushed
@@ -371,10 +368,10 @@ def test_an_open_socket_keeps_the_name(client: TestClient) -> None:
         )
 
     def claimable() -> bool:
-        res = _phone(client).post(f"/r/{code}/name", data={"name": "Léa"})
+        res = phone(client).post(f"/r/{code}/name", data={"name": "Léa"})
         return res.status_code == 204
 
-    _as(client, code, "Léa")
+    claim(client, code, "Léa")
     assert not claimable()  # just claimed: still here
     gone()
     with client.websocket_connect(f"/ws/{code}?view=html") as lea:
@@ -396,8 +393,26 @@ def test_a_name_from_before_claims_is_kept_once(client: TestClient) -> None:
     # Read once, then deleted
     assert f'{old}=""; expires' in res.headers["set-cookie"]
     # Someone else already holds it: the sheet opens, prefilled
-    other = _phone(client)
+    other = phone(client)
     other.cookies.set(old, quote("Léa"))
     page = other.get(f"/r/{code}").text
     assert 'class="sheet" id="name-sheet"' in page
     assert 'value="Léa"' in page
+
+
+def _token_cookie(client: TestClient) -> str:
+    code = _room(client)
+    res = client.post(f"/r/{code}/name", data={"name": "Léa"})
+    return next(
+        h for h in res.headers.get_list("set-cookie") if h.startswith("karaoke_guest=")
+    )
+
+
+def test_the_token_cookie_is_secure_behind_https(
+    client: TestClient, make_settings: Callable[..., Settings]
+) -> None:
+    assert "Secure" not in _token_cookie(client)  # public URL in http
+    cfg = make_settings(host_password="secret", public_url="https://k.example")
+    with TestClient(create_app(cfg), base_url="https://testserver") as https:
+        token = _token_cookie(https)
+    assert "Secure" in token and "HttpOnly" in token

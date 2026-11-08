@@ -159,3 +159,19 @@ def test_new_item_builds_its_thumbnail_and_flags() -> None:
     assert item.thumbnail == "https://i.ytimg.com/vi/abcdefghijk/mqdefault.jpg"
     assert item.singer == "Anonyme"
     assert item.cancelled
+
+
+def test_a_renamed_guest_takes_their_songs_and_photos() -> None:
+    room = Room(code="ABCD")
+    for name in ("a", "b", "c"):
+        room.add(_item(name))
+    room.queue[1].singer = "Tom"
+    room.advance()  # "a" plays, announced as "me"
+    room.photos.add(Photo(uploader="me"))
+    room.photos.add(Photo(uploader="Tom"))
+    assert room.rename_guest("me", "Léa")
+    assert room.current is not None and room.current.singer == "me"
+    assert [i.singer for i in room.queue] == ["Tom", "Léa"]
+    assert [p.uploader for p in room.photos.pending] == ["Léa", "Tom"]
+    assert not room.rename_guest("nobody", "Léa")
+    assert not room.rename_guest("", "Léa")

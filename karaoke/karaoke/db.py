@@ -151,7 +151,8 @@ class RoomTx:
     # screen (deleted after the screens fade it out).
     removed_photos: list[str] = field(default_factory=list)
     hidden_photo: str | None = None
-    _loaded_pending: set[str] = field(default_factory=set)
+    # id -> uploader of the photos pending when loaded
+    _loaded_pending: dict[str, str] = field(default_factory=dict)
     _loaded_current: str | None = None
     _loaded_photo: str | None = None
 
@@ -271,7 +272,7 @@ class Store:
             tx = RoomTx(
                 conn,
                 room,
-                _loaded_pending={p.id for p in room.photos.pending},
+                _loaded_pending={p.id: p.uploader for p in room.photos.pending},
                 _loaded_current=room.current.id if room.current else None,
                 _loaded_photo=room.photo.id if room.photo else None,
             )
@@ -410,7 +411,7 @@ class Store:
             )
         # Photos that left the pending queue: shown (now on screen) or cancelled
         remaining = {p.id for p in room.photos.pending}
-        for photo_id in tx._loaded_pending - remaining:
+        for photo_id in tx._loaded_pending.keys() - remaining:
             if room.photo and room.photo.id == photo_id:
                 await conn.execute(
                     "UPDATE photos SET state = 'shown', shown_turn = $2 WHERE id = $1",
@@ -420,6 +421,16 @@ class Store:
             else:
                 await conn.execute("DELETE FROM photos WHERE id = $1", photo_id)
                 tx.removed_photos.append(photo_id)
+        # Photos still pending whose uploader changed name (Room.rename_guest)
+        renamed = [
+            (p.id, p.uploader)
+            for p in room.photos.pending
+            if tx._loaded_pending.get(p.id, p.uploader) != p.uploader
+        ]
+        if renamed:
+            await conn.executemany(
+                "UPDATE photos SET uploader = $2 WHERE id = $1", renamed
+            )
         if tx._loaded_photo and tx._loaded_photo != (room.photo and room.photo.id):
             tx.hidden_photo = tx._loaded_photo
 
@@ -481,39 +492,43 @@ class Store:
         )
         return {r["token"]: r["name"] for r in rows}
 
-    async def claim_name(self, code: str, token: str, name: str, now: float) -> bool:
-        """Give the name to this phone, releasing the one it held before.
-        False while another phone holding it has been seen recently."""
-        code = code.upper()
-        try:
-            async with self.pool.acquire() as conn, conn.transaction():
-                holder = await conn.fetchrow(
-                    """SELECT token, extract(epoch FROM last_seen)::float8 AS seen
-                       FROM guests WHERE room_code = $1 AND name = $2 FOR UPDATE""",
-                    code,
-                    name,
-                )
-                if holder and holder["token"] != token:
-                    if holder["seen"] > now - NAME_RELEASE_SECONDS:
-                        return False
-                    await conn.execute(
-                        "DELETE FROM guests WHERE room_code = $1 AND token = $2",
-                        code,
-                        holder["token"],
-                    )
-                await conn.execute(
-                    """INSERT INTO guests (room_code, token, name, last_seen)
-                       VALUES ($1, $2, $3, to_timestamp($4))
-                       ON CONFLICT (room_code, token)
-                       DO UPDATE SET name = $3, last_seen = to_timestamp($4)""",
-                    code,
-                    token,
-                    name,
-                    now,
-                )
-        except asyncpg.UniqueViolationError:
-            return False  # another phone claimed it at the same moment
-        return True
+    @staticmethod
+    async def claim_name(tx: RoomTx, token: str, name: str, now: float) -> str | None:
+        """Give the name to this phone and return the one it held before (""
+        if none); None while another phone holding it was seen recently.
+
+        Runs inside `room_tx`: claims in a room are serialized by the room row
+        lock, and the caller moves the old name's songs and photos in the same
+        transaction (Room.rename_guest)."""
+        conn, code = tx.conn, tx.room.code
+        rows = await conn.fetch(
+            """SELECT token, name, extract(epoch FROM last_seen)::float8 AS seen
+               FROM guests WHERE room_code = $1 AND (name = $2 OR token = $3)""",
+            code,
+            name,
+            token,
+        )
+        previous = next((r["name"] for r in rows if r["token"] == token), "")
+        holder = next((r for r in rows if r["name"] == name), None)
+        if holder and holder["token"] != token:
+            if holder["seen"] > now - NAME_RELEASE_SECONDS:
+                return None
+            await conn.execute(
+                "DELETE FROM guests WHERE room_code = $1 AND token = $2",
+                code,
+                holder["token"],
+            )
+        await conn.execute(
+            """INSERT INTO guests (room_code, token, name, last_seen)
+               VALUES ($1, $2, $3, to_timestamp($4))
+               ON CONFLICT (room_code, token)
+               DO UPDATE SET name = $3, last_seen = to_timestamp($4)""",
+            code,
+            token,
+            name,
+            now,
+        )
+        return previous
 
     async def suggest_name(self, code: str, name: str) -> str:
         """`name 2`, `name 3`…: the first one nobody holds in the room."""

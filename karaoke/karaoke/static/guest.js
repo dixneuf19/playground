@@ -33,7 +33,8 @@ $("name-form").onsubmit = async (e) => {
   }
   const body = await res.json().catch(() => ({}));
   $("name-error").textContent = (body.detail || "Oups, ça n'a pas marché") +
-    (body.suggestion ? `. Et « ${body.suggestion} » ?` : "");
+    // French spacing, and the suggested name kept on one line
+    (body.suggestion ? `. Et «\u00a0${body.suggestion.replaceAll(" ", "\u00a0")}\u00a0»\u00a0?` : "");
   $("name-error").classList.remove("hidden");
   if (body.suggestion) $("name-input").value = body.suggestion;
 };

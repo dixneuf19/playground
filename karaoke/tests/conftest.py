@@ -38,6 +38,21 @@ def freeze_reactions(client: TestClient) -> None:
     setattr(reactions, "command", frozen)  # noqa: B010
 
 
+def claim(client: TestClient, code: str, name: str) -> TestClient:
+    """Claim the name in the room, as the name sheet does (a client is one
+    phone: claiming another name renames it)."""
+    res = client.post(f"/r/{code}/name", data={"name": name})
+    assert res.status_code == 204, res.text
+    return client
+
+
+def phone(client: TestClient) -> TestClient:
+    """Another phone in the same app: its own cookies, the same event loop."""
+    other = TestClient(client.app, base_url=str(client.base_url))
+    other.portal = client.portal
+    return other
+
+
 def _wait_for(url: str, timeout: float = 30) -> None:
     async def ping() -> None:
         conn = await asyncpg.connect(url)
@@ -117,7 +132,9 @@ def make_settings(database_url: str, tmp_path: Path) -> Callable[..., Settings]:
 @pytest.fixture
 def client(make_settings: Callable[..., Settings]) -> Iterator[TestClient]:
     app = create_app(
-        make_settings(host_password="secret", public_url="https://k.example")
+        # http: an https public URL makes cookies `secure`, and the test
+        # client opens WebSockets over plain ws://
+        make_settings(host_password="secret", public_url="http://k.example")
     )
     with TestClient(app) as c:
         # No YouTube in unit tests: downloads never start.

@@ -145,3 +145,13 @@ _adapter: TypeAdapter[AnyMessage] = TypeAdapter(AnyMessage)
 def parse(data: Any) -> Message:
     """Raises pydantic.ValidationError when the message makes no sense."""
     return _adapter.validate_python(data)
+
+
+def from_guest(msg: Message, name: str) -> Message:
+    """Who sings or owns a photo is the name the phone holds in the room,
+    never what the message says."""
+    if isinstance(msg, Add):
+        return msg.model_copy(update={"singer": name})
+    if isinstance(msg, PhotoRemove):
+        return msg.model_copy(update={"uploader": name})
+    return msg
