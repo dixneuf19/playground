@@ -202,7 +202,10 @@ async def ws(
             return
         while True:
             try:
-                msg = parse(json.loads(await websocket.receive_text()))
+                data = json.loads(await websocket.receive_text())
+                if isinstance(data, dict):  # reactions are throttled per socket
+                    data["sender"] = f"ws:{id(client)}"
+                msg = parse(data)
             except (ValueError, ValidationError) as e:
                 logger.warning("Bad message in %s: %s", code, e)
                 continue

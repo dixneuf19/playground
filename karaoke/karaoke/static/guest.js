@@ -168,6 +168,34 @@ function sortable() {
 }
 sortable();
 
+// --- reactions on the big screen ----------------------------------------------
+// Quick taps are grouped into one message per kind (the server takes up to 10).
+const REACT_BATCH = 10;
+const REACT_EVERY = 250; // ms
+const reacting = new Map();
+let reactTimer = null;
+function flushReactions() {
+  reactTimer = null;
+  for (const [kind, count] of reacting) {
+    const body = new URLSearchParams({ type: "react", kind, count: Math.min(count, REACT_BATCH) });
+    fetch(`/r/${CODE}/do`, { method: "POST", body }).catch(() => {});
+  }
+  reacting.clear();
+}
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-react]");
+  if (!btn) return;
+  const kind = btn.dataset.react;
+  reacting.set(kind, (reacting.get(kind) || 0) + 1);
+  reactTimer ??= setTimeout(flushReactions, REACT_EVERY);
+  navigator.vibrate?.(8);
+  const puff = document.createElement("span");
+  puff.className = "puff";
+  puff.textContent = btn.dataset.emoji;
+  puff.addEventListener("animationend", () => puff.remove());
+  btn.append(puff);
+});
+
 // --- photos -----------------------------------------------------------------
 const MAX_SIDE = 1920;
 

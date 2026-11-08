@@ -103,7 +103,7 @@ async def act(code: str, request: Request, svc: Svc, me: GuestName) -> Response:
     code = await room_or_404(svc, code)
     data: dict[str, Any] = dict(await request.form())
     # Who sings or owns a photo is the phone's name, not something it says.
-    data["singer"] = data["uploader"] = me
+    data["singer"] = data["uploader"] = data["sender"] = me
     try:
         msg = parse(data)
     except ValidationError as e:

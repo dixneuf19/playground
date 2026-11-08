@@ -90,6 +90,32 @@ def test_add_takes_the_singer_from_the_cookie(client: TestClient) -> None:
     assert client.post("/r/ZZZZ/do", data={"type": "skip"}).status_code == 404
 
 
+def test_reactions_from_the_phone_page(client: TestClient) -> None:
+    code = _room(client)
+    page = _as(client, code, "Léa").get(f"/r/{code}").text
+    assert 'data-react="fire"' in page and 'data-react="confetti"' in page
+    with client.websocket_connect(f"/ws/{code}?role=display") as screen:
+        screen.receive_json()
+        do = f"/r/{code}/do"
+        react = {"type": "react", "kind": "laugh", "count": 2}
+        assert client.post(do, data=react).status_code == 204
+        react = {"type": "react", "kind": "hearts"}
+        assert client.post(do, data=react).status_code == 204
+        assert screen.receive_json() == {
+            "type": "command",
+            "action": "react",
+            "emoji": "😂",
+            "count": 2,
+        }
+        assert screen.receive_json() == {
+            "type": "command",
+            "action": "react",
+            "effect": "hearts",
+        }
+    res = client.post(f"/r/{code}/do", data={"type": "react", "kind": "nope"})
+    assert res.status_code == 422
+
+
 def test_pushed_fragments_are_personal_and_escaped(client: TestClient) -> None:
     code = _room(client)
     _as(client, code, "Léa")

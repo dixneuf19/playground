@@ -2,8 +2,8 @@
 
 Self-hosted karaoke night, in the spirit of KaraFun bars. A computer on the TV
 creates a room and shows a QR code; phones scan it to queue songs (KaraFun's
-YouTube channels first, all of YouTube on request), control playback and send
-photos to the big screen.
+YouTube channels first, all of YouTube on request), control playback, send
+photos to the big screen and make emoji, confetti and hearts fly across it.
 
 Live at https://karaoke.dixneuf19.fr.
 

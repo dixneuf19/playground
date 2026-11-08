@@ -192,6 +192,11 @@ class Store:
         async with self.pool.acquire() as conn:
             await self._notify(conn, {"room": code})
 
+    async def notify_command(self, code: str, command: dict[str, Any]) -> None:
+        """A display command outside any room change (reactions)."""
+        async with self.pool.acquire() as conn:
+            await self._notify(conn, {"room": code, "command": command})
+
     # --- rooms --------------------------------------------------------------
 
     async def create_room(self) -> str:

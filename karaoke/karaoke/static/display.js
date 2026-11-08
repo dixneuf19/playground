@@ -200,6 +200,66 @@ function onCommand(cmd) {
   else if (cmd.action === "play" && $("turn").classList.contains("hidden")) video.play().catch(() => {});
   else if (cmd.action === "restart") { video.currentTime = 0; video.play().catch(() => {}); }
   else if (cmd.action === "volume") video.volume = cmd.value;
+  else if (cmd.action === "react") react(cmd);
+}
+
+// --- reactions: emoji float up, effects rain down --------------------------
+// Never shows who sent them. Live particles are capped so that a whole room
+// spamming fills the screen without freezing the TV; effects get some extra
+// room, so a confetti burst still shows when the screen is full of emoji.
+const MAX_EMOJI = 80;
+const MAX_PARTICLES = 200;
+const CONFETTI = 70;
+const HEARTS = 35;
+const CONFETTI_COLORS = ["#ff3d8b", "#7b5cff", "#ffd23f", "#3ddcff", "#5dff8f", "#ffffff"];
+const HEART_EMOJI = ["💖", "💗", "💕", "❤️", "💘"];
+let particles = 0;
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = (list) => list[Math.floor(Math.random() * list.length)];
+
+function spawn(cls, style, keyframes, timing, text = "") {
+  const el = document.createElement("span");
+  el.className = `particle ${cls}`;
+  el.textContent = text;
+  Object.assign(el.style, style);
+  $("fx").append(el);
+  particles++;
+  const anim = el.animate(keyframes, { fill: "backwards", ...timing });
+  anim.finished.catch(() => {}).finally(() => { el.remove(); particles--; });
+}
+
+function floatEmoji(emoji, delay) {
+  const drift = rand(-6, 6);
+  spawn("emoji", { left: `${rand(4, 84)}vw`, fontSize: `${rand(3, 5.5)}vw` }, [
+    { transform: "translate(0, 15vh) scale(0.5)", opacity: 0 },
+    { transform: `translate(${drift / 2}vw, -10vh) scale(1)`, opacity: 1, offset: 0.15 },
+    { transform: `translate(${drift}vw, -55vh) scale(1.05)`, opacity: 1, offset: 0.7 },
+    { transform: `translate(${-drift / 2}vw, -85vh) scale(1.15)`, opacity: 0 },
+  ], { duration: rand(3200, 4600), delay, easing: "ease-out" }, emoji);
+}
+
+function fall(cls, style, text, spin) {
+  const sway = rand(-10, 10);
+  spawn(`fall ${cls}`, { left: `${rand(-2, 100)}vw`, ...style }, [
+    { transform: "translate(0, -8vh) rotate(0deg)", opacity: 1 },
+    { transform: `translate(${sway}vw, 50vh) rotate(${spin / 2}deg)`, opacity: 1, offset: 0.5 },
+    { transform: `translate(${-sway / 2}vw, 108vh) rotate(${spin}deg)`, opacity: 0.9 },
+  ], { duration: rand(2600, 4200), delay: rand(0, 900), easing: "cubic-bezier(.35,.55,.65,1)" }, text);
+}
+
+function react(cmd) {
+  if (cmd.effect === "confetti") {
+    for (let i = 0; i < CONFETTI && particles < MAX_PARTICLES; i++) {
+      fall("confetti", { background: pick(CONFETTI_COLORS) }, "", rand(-900, 900));
+    }
+  } else if (cmd.effect === "hearts") {
+    for (let i = 0; i < HEARTS && particles < MAX_PARTICLES; i++) {
+      fall("heart", { fontSize: `${rand(2, 4)}vw` }, pick(HEART_EMOJI), rand(-40, 40));
+    }
+  } else if (cmd.emoji) {
+    // a batch of quick taps from one phone, spread out a little
+    for (let i = 0; i < (cmd.count || 1) && particles < MAX_EMOJI; i++) floatEmoji(cmd.emoji, i * 110);
+  }
 }
 
 document.addEventListener("keydown", (e) => {

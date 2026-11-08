@@ -10,6 +10,7 @@ from typing import Annotated, Any, ClassVar, Literal
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, TypeAdapter
 
 from karaoke.library import VIDEO_ID
+from karaoke.reactions import MAX_BATCH, Kind
 
 
 def clean_text(value: object, limit: int) -> str:
@@ -88,6 +89,16 @@ class PhotoRemove(Message):
     uploader: Name = ""
 
 
+class React(Message):
+    """Emoji or an effect on the big screen. `count` groups quick taps."""
+
+    type: Literal["react"]
+    kind: Kind
+    count: Annotated[int, Field(ge=1, le=MAX_BATCH)] = 1
+    # Set by the server (the socket, or the phone page's name): the throttle key.
+    sender: Name = ""
+
+
 class Ended(Message):
     type: Literal["ended"]
     screen_only: ClassVar[bool] = True
@@ -120,6 +131,7 @@ AnyMessage = Annotated[
     | Retry
     | PhotoSkip
     | PhotoRemove
+    | React
     | Ended
     | Player
     | Position,

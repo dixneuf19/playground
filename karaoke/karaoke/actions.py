@@ -20,6 +20,7 @@ from karaoke.messages import (
     Play,
     Player,
     Position,
+    React,
     Remove,
     Restart,
     Retry,
@@ -27,6 +28,7 @@ from karaoke.messages import (
     Volume,
 )
 from karaoke.photo_files import PhotoFiles
+from karaoke.reactions import Reactions
 from karaoke.rooms import QueueItem, Room
 
 logger = logging.getLogger(__name__)
@@ -37,6 +39,7 @@ class Actions:
         self.store = store
         self.library = library
         self.photos = photos
+        self.reactions = Reactions()
 
     async def handle(self, code: str, msg: Message, from_screen: bool) -> Room | None:
         """Apply a message to the room. Returns the room as it is afterwards
@@ -49,6 +52,14 @@ class Actions:
                 return None
             case Position():
                 await self.store.save_position(code, msg.item_id, msg.t, time.time())
+                return None
+            case React():
+                # Ephemeral: straight to the screens, no lock and no state.
+                cmd = self.reactions.command(
+                    code, msg.sender, msg.kind, msg.count, time.monotonic()
+                )
+                if cmd is not None:
+                    await self.store.notify_command(code, cmd)
                 return None
         async with self.store.room_tx(code) as tx:
             if tx is None:
