@@ -3,13 +3,17 @@ name: karaoke - Docker build and release
 on:
   push:
     branches: [main]
-    paths:
+    paths: &paths
       - "karaoke/**"
+      # Not in the image (see .dockerignore): a new image would roll the pods
+      # for nothing.
+      - "!karaoke/tests/**"
+      - "!karaoke/scripts/**"
+      - "!karaoke/*.md"
+      - "!karaoke/Makefile"
       - ".github/workflows/karaoke-docker.yml"
   pull_request:
-    paths:
-      - "karaoke/**"
-      - ".github/workflows/karaoke-docker.yml"
+    paths: *paths
 
 env:
   TARGET_PLATFORMS: linux/amd64,linux/arm64
@@ -55,5 +59,5 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || env.TARGET_PLATFORMS }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=karaoke
+          cache-to: type=gha,scope=karaoke,mode=max
