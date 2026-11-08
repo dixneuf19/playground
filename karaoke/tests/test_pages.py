@@ -161,3 +161,28 @@ def test_search_renders_results(client: TestClient) -> None:
     assert 'name="everywhere" value="1"' in html
     assert "✓" in html  # already queued by Léa
     assert client.get("/r/ZZZZ/search", params={"q": "x"}).status_code == 404
+
+
+def test_the_queue_tab_holds_the_player(client: TestClient) -> None:
+    code = _room(client)
+    page = _as(client, code, "Léa").get(f"/r/{code}").text
+    assert 'data-view="stage"' not in page and 'id="stage"' not in page
+    assert 'id="player" class="now player card hidden"' in page  # nothing plays
+    svc = services(client)
+    path = svc.library.path_for(VID)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"fake mp4")
+    portal = client.portal
+    assert portal is not None
+    portal.call(svc.store.video_status, VID)  # registers the video
+    portal.call(svc.store.finish_download, VID, True, "Song", 1)
+    client.post(f"/r/{code}/do", data={"type": "add", "video_id": VID, "title": "Song"})
+    page = client.get(f"/r/{code}").text
+    queue_tab = page[page.index('id="view-queue"') : page.index('id="view-photos"')]
+    player = queue_tab[
+        queue_tab.index('id="player"') : queue_tab.index('id="queue-panel"')
+    ]
+    for control in ("Recommencer", "Pause", "Suivante", 'id="volume"'):
+        assert control in player
+    # The search tab's mini card leads to it
+    assert 'id="now-mini" class="now card" data-view="queue"' in page

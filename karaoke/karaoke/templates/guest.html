@@ -27,7 +27,7 @@
 
   <main>
     <section class="view active" id="view-search">
-      {{ state.now_playing("now-mini") }}
+      {{ state.now_playing() }}
       <form class="searchbar" id="search-form" hx-get="/r/{{ room.code }}/search" hx-target="#results" hx-sync="this:replace">
         <span class="icon">🔍</span>
         <input class="field" id="q" name="q" type="search" placeholder="Titre, artiste ou lien YouTube…" autocomplete="off" enterkeyhint="search">
@@ -37,7 +37,7 @@
     </section>
 
     <section class="view" id="view-queue">
-      {{ state.now_playing("now-mini-q") }}
+      {{ state.player() }}
       {{ state.queue_panel() }}
     </section>
 
@@ -49,17 +49,12 @@
       <div class="sending hidden" id="sending"><span class="spinner"></span><span id="sending-text"></span></div>
       {{ state.my_photos_panel() }}
     </section>
-
-    <section class="view" id="view-stage">
-      {{ state.stage() }}
-    </section>
   </main>
 
   <nav>
     <button data-view="search" class="active"><span class="ic">🔍</span>Chercher</button>
     <button data-view="queue"><span class="ic">🎶</span>File d'attente{{ state.queue_badge() }}</button>
     <button data-view="photos"><span class="ic">📸</span>Photos{{ state.photo_badge() }}</button>
-    <button data-view="stage"><span class="ic">🎛️</span>Scène</button>
   </nav>
 
   <div class="sheet{{ ' hidden' if me }}" id="name-sheet">

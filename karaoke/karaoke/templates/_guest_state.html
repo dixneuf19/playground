@@ -15,14 +15,39 @@ hx-post="{{ do }}" hx-vals='{{ vals|tojson }}' hx-swap="none"
 {%- if confirm %} hx-confirm="{{ confirm }}" data-confirm-title="{{ title }}" data-confirm-yes="{{ yes }}"{% endif %}
 {%- endmacro %}
 
-{% macro now_playing(id) %}
-<div id="{{ id }}" class="now card{{ ' hidden' if not c }}{{ ' paused' if paused }}" {{ o }}>
+{% macro now_meta() %}
+<img src="{{ c.thumbnail }}" alt="">
+<div class="meta">
+  <div class="label"><span class="eq"><i></i><i></i><i></i></span>{{ "En pause" if paused else "En cours" }}</div>
+  <div class="t ellipsis">{{ c.title }}</div>
+  <div class="muted ellipsis small">{{ c.singer }}{% if c.artist %} · {{ c.artist }}{% endif %}</div>
+</div>
+{% endmacro %}
+
+{# On the search tab: tapping it opens the queue tab, where the controls are. #}
+{% macro now_playing() %}
+<div id="now-mini" class="now card{{ ' hidden' if not c }}{{ ' paused' if paused }}" data-view="queue" {{ o }}>
+  {% if c %}{{ now_meta() }}<span class="go" aria-hidden="true">›</span>{% endif %}
+</div>
+{% endmacro %}
+
+{# Top of the queue tab: what plays and its controls, like a music app's player. #}
+{% macro player() %}
+<div id="player" class="now player card{{ ' hidden' if not c }}{{ ' paused' if paused }}" {{ o }}>
   {% if c %}
-  <img src="{{ c.thumbnail }}" alt="">
-  <div class="meta">
-    <div class="label"><span class="eq"><i></i><i></i><i></i></span>{{ "En pause" if paused else "En cours" }}</div>
-    <div class="t ellipsis">{{ c.title }}</div>
-    <div class="muted ellipsis small">{{ c.singer }}{% if c.artist %} · {{ c.artist }}{% endif %}</div>
+  <div class="row">{{ now_meta() }}</div>
+  <div class="controls">
+    <button class="ctl" aria-label="Recommencer" {{ action({"type": "restart"}) }}>⟲</button>
+    <button class="ctl main" aria-label="{{ 'Lecture' if paused else 'Pause' }}"
+      {{ action({"type": "play" if paused else "pause"}) }}>{{ "▶" if paused else "❚❚" }}</button>
+    <button class="ctl" aria-label="Suivante" {{ action({"type": "skip"},
+      c.singer ~ " est en train de chanter « " ~ c.title ~ " ».", "Passer la chanson ?", "Passer") }}>⏭</button>
+  </div>
+  <div class="vol">
+    <span>🔈</span>
+    <input type="range" id="volume" name="value" min="0" max="1" step="0.05" value="{{ room.volume }}" aria-label="Volume"
+      hx-post="{{ do }}" hx-vals='{"type": "volume"}' hx-trigger="change" hx-swap="none">
+    <span>🔊</span>
   </div>
   {% endif %}
 </div>
@@ -82,36 +107,6 @@ hx-post="{{ do }}" hx-vals='{{ vals|tojson }}' hx-swap="none"
   </div>
   {% elif room.queue|length > 1 %}
   <p class="muted hint">Maintiens ⠿ et glisse pour réordonner.</p>
-  {% endif %}
-</div>
-{% endmacro %}
-
-{% macro stage() %}
-<div class="stage" id="stage" {{ o }}>
-  {% if not c %}
-  <div class="placeholder">
-    <div class="big">🎤</div>Rien ne joue pour l'instant.<br>
-    {{ "La prochaine chanson se prépare…" if room.queue else "Ajoute une chanson pour lancer la soirée !" }}
-  </div>
-  {% else %}
-  <img class="art" src="{{ c.thumbnail|replace('mqdefault', 'hqdefault') }}" alt="">
-  <div class="t">{{ c.title }}</div>
-  <div class="a">{{ c.artist }}</div>
-  <div class="singer"><span class="tag tag-me">🎤 {{ c.singer }}</span></div>
-  <div class="controls">
-    <button class="ctl" aria-label="Recommencer" {{ action({"type": "restart"}) }}>⟲</button>
-    <button class="ctl main" aria-label="{{ 'Lecture' if paused else 'Pause' }}"
-      {{ action({"type": "play" if paused else "pause"}) }}>{{ "▶" if paused else "❚❚" }}</button>
-    <button class="ctl" aria-label="Suivante" {{ action({"type": "skip"},
-      c.singer ~ " est en train de chanter « " ~ c.title ~ " ».", "Passer la chanson ?", "Passer") }}>⏭</button>
-  </div>
-  <div class="vol">
-    <span>🔈</span>
-    <input type="range" id="volume" name="value" min="0" max="1" step="0.05" value="{{ room.volume }}"
-      hx-post="{{ do }}" hx-vals='{"type": "volume"}' hx-trigger="change" hx-swap="none">
-    <span>🔊</span>
-  </div>
-  <p class="muted stats">{{ room.sung|plural("chanson") }} chantée{{ "s" if room.sung > 1 }} ce soir</p>
   {% endif %}
 </div>
 {% endmacro %}
