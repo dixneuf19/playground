@@ -18,6 +18,22 @@
       "matchDatasources": ["npm"],
       "matchPackageNames": ["htmx.org"],
       "respectLatest": false
+    },
+    {
+      "description": "The uv builder image carries the Python version in its tag (python3.15-trixie-slim), which docker versioning cannot parse. Version it by that Python and move it with the runtime image",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/astral-sh/uv"],
+      "matchCurrentValue": "/^python\\d+\\.\\d+-/",
+      "versioning": "regex:^python(?<major>\\d+)\\.(?<minor>\\d+)-(?<compatibility>.+)$",
+      "groupName": "python runtime"
+    },
+    {
+      "description": "Same manual review as the python runtime itself (see the preset)",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/astral-sh/uv"],
+      "matchCurrentValue": "/^python\\d+\\.\\d+-/",
+      "matchUpdateTypes": ["major", "minor"],
+      "automerge": false
     }
   ]
 }
