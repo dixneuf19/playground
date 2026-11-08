@@ -18,6 +18,25 @@ def test_search_finds_french_catalogue() -> None:
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("query", "channel", "song", "artist"),
+    [
+        ("desireless voyage voyage", "bdfabkaraoke9959", "Voyage voyage", "Desireless"),
+        ("toto africa", "singkingkaraoke", "Africa", "Toto"),
+    ],
+)
+def test_search_parses_each_channel(
+    query: str, channel: str, song: str, artist: str
+) -> None:
+    results = search_channels(query, [channel])
+    assert results
+    assert (results[0].title.lower(), results[0].artist.lower()) == (
+        song.lower(),
+        artist.lower(),
+    )
+
+
+@pytest.mark.integration
 def test_download_produces_playable_mp4(tmp_path: Path) -> None:
     library = Library(tmp_path, max_height=360)
     progress: list[float] = []

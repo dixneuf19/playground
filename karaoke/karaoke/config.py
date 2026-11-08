@@ -5,7 +5,9 @@ from urllib.parse import quote
 
 
 def _channels() -> list[str]:
-    raw = os.environ.get("KARAOKE_CHANNELS", "karafunfr,karafun")
+    raw = os.environ.get(
+        "KARAOKE_CHANNELS", "karafunfr,karafun,bdfabkaraoke9959,singkingkaraoke"
+    )
     return [c.strip().lstrip("@") for c in raw.split(",") if c.strip()]
 
 

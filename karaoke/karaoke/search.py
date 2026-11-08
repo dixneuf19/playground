@@ -18,10 +18,23 @@ logger = logging.getLogger(__name__)
 CHANNEL_RESULTS = 20
 YOUTUBE_RESULTS = 12
 
-# "Song - Artist | Karaoke Version | KaraFun" (international channel)
-_INTL_SUFFIX = re.compile(r"\s*\|\s*karaoke version\s*\|\s*karafun\s*$", re.I)
-# "Karaoké Song - Artist *" (French channel)
-_FR_PREFIX = re.compile(r"^\s*karaok[eé]\s+", re.I)
+# Title formats of the curated channels, each with named song/artist groups.
+_FORMATS = [
+    re.compile(p, re.I)
+    for p in (
+        # @karafun: "Song - Artist | Karaoke Version | KaraFun"
+        r"^(?P<song>.+) - (?P<artist>.+?)\s*\|\s*karaoke version\s*\|\s*karafun$",
+        # @karafunfr: "Karaoké Song - Artist *"
+        r"^\s*karaok[eé]\s+(?P<song>.+) - (?P<artist>.+?)[\s*]*$",
+        # @bdfabkaraoke9959: "Artist - Song (chœurs) (2013) [BDFab karaoke]"
+        r"^(?P<artist>.+?) - (?P<song>.+?)(?:\s*\(ch(?:œ|oe)urs\))?"
+        r"(?:\s*\(\d{4}\))?\s*\[bdfab karaoke\]$",
+        # @singkingkaraoke and most labels: "Artist - Song (Karaoke Version)"
+        r"^(?P<artist>.+?) - (?P<song>.+?)\s*\(karaoke version\)$",
+        # Its variants, kept in the song: "Artist - Song (Piano Karaoke)"
+        r"^(?P<artist>.+?) - (?P<song>.+\([^()]*\bkaraoke\b[^()]*\))$",
+    )
+]
 
 
 @dataclass
@@ -39,13 +52,28 @@ class SearchResult:
         return asdict(self)
 
 
+def parse_title(raw: str) -> tuple[str, str] | None:
+    """(song, artist) when the title is in a curated channel's format."""
+    for fmt in _FORMATS:
+        if m := fmt.match(raw.strip()):
+            return m["song"].strip(), m["artist"].strip()
+    return None
+
+
 def split_title(raw: str) -> tuple[str, str]:
-    """Turn a KaraFun video title into (song, artist); best effort otherwise."""
-    cleaned = _FR_PREFIX.sub("", _INTL_SUFFIX.sub("", raw)).rstrip(" *").strip()
+    """Turn a karaoke video title into (song, artist); best effort otherwise."""
+    if parsed := parse_title(raw):
+        return parsed
+    cleaned = raw.rstrip(" *").strip()
     if " - " in cleaned:
         song, artist = cleaned.rsplit(" - ", 1)
         return song.strip(), artist.strip()
     return cleaned, ""
+
+
+def is_karaoke(raw: str) -> bool:
+    """Curated channels also post compilations without lyrics, teasers, etc."""
+    return "karaok" in normalize(raw).replace(" ", "")
 
 
 def normalize(text: str) -> str:
@@ -132,7 +160,11 @@ def search_channels(query: str, channels: list[str]) -> list[SearchResult]:
         except Exception:
             logger.exception("Search failed on @%s", handle)
             return []
-        return [r for e in entries if (r := _to_result(e, curated=True))]
+        return [
+            r
+            for e in entries
+            if (r := _to_result(e, curated=True)) and is_karaoke(r.raw_title)
+        ]
 
     with ThreadPoolExecutor(max(len(channels), 1)) as pool:
         batches = list(pool.map(one, channels))
@@ -218,9 +250,8 @@ class Searcher:
         if not found:
             return None
         r = found[0]
-        if "karafun" in normalize(r.channel):  # a link lookup is not parsed
-            title, artist = split_title(r.raw_title)
-            r = replace(r, title=title, artist=artist)
+        if parsed := parse_title(r.raw_title):  # a link lookup is not parsed
+            r = replace(r, title=parsed[0], artist=parsed[1])
         return r
 
     async def _search(

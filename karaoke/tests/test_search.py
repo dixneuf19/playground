@@ -5,6 +5,7 @@ import pytest
 from karaoke import search
 from karaoke.search import (
     SearchResult,
+    is_karaoke,
     is_strong,
     normalize,
     rank,
@@ -27,11 +28,48 @@ from karaoke.search import (
             "Je vais t'aimer - Michel Sardou | Karaoke Version | KaraFun",
             ("Je vais t'aimer", "Michel Sardou"),
         ),
+        ("Karaoké Le sud (Live) - Les Enfoirés *", ("Le sud (Live)", "Les Enfoirés")),
+        (
+            "Michel Sardou - Les lacs du Connemara (chœurs) (1981) [BDFab karaoke]",
+            ("Les lacs du Connemara", "Michel Sardou"),
+        ),
+        (
+            "K. Maro & Nancy Martinez - Femme Like U (2004) [BDFab karaoke]",
+            ("Femme Like U", "K. Maro & Nancy Martinez"),
+        ),
+        (
+            "Hubert-Félix Thiéfaine - Les dingues et les paumés (choeurs) (1982)"
+            " [BDFab karaoke]",
+            ("Les dingues et les paumés", "Hubert-Félix Thiéfaine"),
+        ),
+        ("Toto - Africa (Karaoke Version)", ("Africa", "Toto")),
+        (
+            "Gloria Gaynor - I Will Survive (Karaoke with Guide Vocal)",
+            ("I Will Survive (Karaoke with Guide Vocal)", "Gloria Gaynor"),
+        ),
+        (
+            "Drake, Don Toliver - Solar Eclipse (Karaoke Version)",
+            ("Solar Eclipse", "Drake, Don Toliver"),
+        ),
         ("Some random video", ("Some random video", "")),
     ],
 )
 def test_split_title(raw: str, expected: tuple[str, str]) -> None:
     assert split_title(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("Toto - Africa (Karaoke Version)", True),
+        ("Karaoké Germaine - Renaud *", True),
+        ("Renaud - Ma gonzesse (1975) [BDFab karaoke]", True),
+        ("Drake, Don Toliver - Solar Eclipse (Instrumental Visualizer)", False),
+        ("stromae | tous les mêmes | lyrics | paroles", False),
+    ],
+)
+def test_is_karaoke(raw: str, expected: bool) -> None:
+    assert is_karaoke(raw) is expected
 
 
 def test_normalize_strips_accents_and_punctuation() -> None:

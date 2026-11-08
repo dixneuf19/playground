@@ -13,9 +13,14 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   (QR code + queue, then the videos). Phones scan it and open `/r/{code}` to search,
   queue, reorder (drag and drop), pause/skip/restart/volume and send photos.
   Anyone in the room may control anything: it's a party.
-- **Curated search first.** The default search runs only on the KaraFun YouTube
-  channels (`KARAOKE_CHANNELS`, default `karafunfr,karafun`), in parallel, then
-  re-ranked (`search.rank`: word overlap + fuzzy ratio). Searching all of YouTube
+- **Curated search first.** The default search runs only on curated YouTube
+  karaoke channels (`KARAOKE_CHANNELS`, default
+  `karafunfr,karafun,bdfabkaraoke9959,singkingkaraoke`: KaraFun's YouTube
+  catalogue misses many French songs, BDFab fills them, Sing King the English
+  ones), in parallel, keeps only titles saying "karaoke", then re-ranks them
+  (`search.rank`: word overlap + fuzzy ratio). Each channel orders its titles
+  its own way: `search.parse_title` knows their formats, so a new channel
+  needs one there (and a test). Searching all of YouTube
   needs an explicit tap and appends " karaoke" to the query. A pasted YouTube link
   resolves that one video; the search placeholder says so, and the intro has no
   paste button (owner's choice). `strong: false` (no result has every query word) makes
