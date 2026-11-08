@@ -2,6 +2,8 @@
 
 Monorepo for small projects, scripts, and experiments.
 
+Read `AGENTS.md` before adding a project: @AGENTS.md
+
 ## Projects
 
 ### soundhoard
