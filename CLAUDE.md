@@ -2,6 +2,10 @@
 
 Monorepo for small projects, scripts, and experiments.
 
+## Adding a project
+
+Name the image `ghcr.io/dixneuf19/playground/<project>` (`IMAGE_NAME: ${{ github.repository }}/<project>` in the docker workflow). The first push from this repo's `GITHUB_TOKEN` creates the package with this repo as admin and inherits its public visibility, so there is nothing to configure on ghcr. A bare `dixneuf19/<project>` name can already be taken by a package from an older standalone repo, and then the push fails with `permission_denied`.
+
 ## Projects
 
 ### soundhoard
