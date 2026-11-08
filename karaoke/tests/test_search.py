@@ -1,5 +1,8 @@
+import asyncio
+
 import pytest
 
+from karaoke import search
 from karaoke.search import (
     SearchResult,
     is_strong,
@@ -91,3 +94,38 @@ def test_video_id_from_pasted_links() -> None:
     ):
         assert video_id_from_url(link) == vid
     assert video_id_from_url("hotel california") is None
+
+
+def _found(video_id: str, raw: str, channel: str, curated: bool) -> SearchResult:
+    title, artist = split_title(raw) if curated else (raw, "")
+    return SearchResult(video_id, title, artist, raw, channel, None, "t", curated)
+
+
+def test_describe_uses_recent_searches_then_a_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    found = _found(
+        "aaaaaaaaaaa", "Song - Artist | Karaoke Version | KaraFun", "KaraFun", True
+    )
+    lookups = {
+        "bbbbbbbbbbb": _found(
+            "bbbbbbbbbbb", "Karaoké Titre - Chanteur *", "KaraFun France", False
+        ),
+        "ccccccccccc": _found("ccccccccccc", "Some clip", "Someone", False),
+    }
+    monkeypatch.setattr(search, "search_channels", lambda _q, _c: [found])
+    monkeypatch.setattr(
+        search, "lookup_video", lambda v: [lookups[v]] if v in lookups else []
+    )
+    searcher = search.Searcher(["karafun"])
+
+    async def main() -> None:
+        await searcher.find("song", everywhere=False)
+        assert await searcher.describe("aaaaaaaaaaa") == found  # from the search
+        karafun = await searcher.describe("bbbbbbbbbbb")  # a lookup, parsed
+        assert karafun and (karafun.title, karafun.artist) == ("Titre", "Chanteur")
+        other = await searcher.describe("ccccccccccc")  # not KaraFun: kept whole
+        assert other and (other.title, other.artist) == ("Some clip", "")
+        assert await searcher.describe("zzzzzzzzzzz") is None
+
+    asyncio.run(main())

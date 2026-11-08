@@ -22,6 +22,14 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
 - **Cancelled artists** (`cancelled.py`, `CANCELLED_ARTISTS`) stay playable but are
   flagged; the phone asks for a "J'assume" confirmation. The flag is computed
   server-side, never trusted from the phone. User-suggested cancellations: future.
+- **Favourites are one ❤️ list for every room** (`favourites.py`, table
+  `favourites`): anyone hearts a song from the search results, the queue or the
+  player, and anyone may take a heart out (it asks first, since it's everyone's
+  list). The search tab lists the latest 50 before a search, above the popular songs. 500 stored at
+  most (a soft cap). Title and artist come from YouTube (`Searcher.describe`:
+  a recent search, else a lookup of the id), never from the phone, since every
+  room shows them. Cache eviction keeps them until the higher
+  `KARAOKE_CACHE_HARD_MAX_GB`.
 - **The screen doesn't show who sent a photo** (a product choice, not a security
   property). A guest is known by the name their phone holds in the room: the
   phone page lists and cancels the pending photos uploaded under that name, and
@@ -86,9 +94,10 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
 | `library.py`, `photo_files.py` | Video files (yt-dlp download, ≤720p H.264 + AAC) and photo files on `/data`. |
 | `cancelled.py` | Cancelled artists, matched on whole normalized words. |
 | `reactions.py` | Reaction palette (`Kind`, `EMOJI`, `EFFECTS`), the per-sender `RateLimit` and the screen command for a reaction. |
+| `favourites.py` | The `Favourite` song shown in the shared ❤️ list, and its cap. |
 | `config.py` | `Settings` from `KARAOKE_*` env vars. |
 | `app.py` | Wiring only: builds the services, includes the routers. |
-| `templates/` | `guest.html` (+ `_guest_state.html` fragments, `_guest_push.html`, `_results.html`), `display.html`, `index.html`. |
+| `templates/` | `guest.html` (+ `_guest_state.html` fragments, `_guest_push.html`, `_results.html`, `_song.html`: the song card with its ❤️ and + buttons, shared by results, popular songs and favourites), `display.html`, `index.html`. |
 | `static/` | `guest.js`/`guest.css`, `display.js`/`display.css`, `common.js` (screen socket + `esc`), `app.css`. htmx 4 (+ its `hx-ws` extension) and SortableJS come from jsDelivr in `guest.html`, pinned with an integrity hash. No build step. |
 | `scripts/sri.py` | Recomputes (`make sri`) or checks (`make check-sri`, in CI) the integrity hashes of CDN scripts in the templates. |
 
@@ -106,7 +115,9 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   `hx-post` to `/r/{code}/do` (form fields = a `messages` model; `singer` and
   `uploader` always come from the name the phone holds) and get the new state by push.
   `hx-confirm` opens the app's own sheet; toasts come from `HX-Trigger`.
-  Search is `GET /r/{code}/search` returning `_results.html`.
+  Search is `GET /r/{code}/search` returning `_results.html`. Search results
+  are not pushed, so the ❤️ button (`_song.html`) posts to `/r/{code}/heart`,
+  which answers with the button in its new state (`outerHTML`).
 - `guest.js` only does what needs the browser: tabs, the name sheet, the
   confirm sheet, toasts, drag and drop (pushes are held during a drag), photo
   resizing before upload.
@@ -139,6 +150,11 @@ Prod runs 2 replicas. Everything a replica knows lives in Postgres or on the sha
    as `{"room", "command"}` via `tx.command()` and forwarded only to screens.
    Reactions are commands too, but outside any transaction (`Store.notify_command`):
    no lock, no DB state, nothing replayed to a screen that reconnects.
+   Favourites are not room state: a heart changes the `favourites` table
+   outside `room_tx` and NOTIFIES `{"favourites": true}`, and each replica
+   pushes every room it has sockets for, with the list. Only those pushes and
+   a socket's first message carry the list (`push_state(favourites=True)`);
+   every push carries which of the room's songs are hearted.
 3. **One leader runs the background work** (`leader.py`). Every replica serves
    pages and phone actions; the leader also runs photo rotation (0.5 s), the
    download loop, a repair pass (15 s) and pruning (10 min). Leadership is a
@@ -155,7 +171,8 @@ Prod runs 2 replicas. Everything a replica knows lives in Postgres or on the sha
    cache only ever holds whole files, even if a demoted leader's yt-dlp thread
    finishes late. LRU eviction (`KARAOKE_CACHE_MAX_GB`, 20) never evicts a video
    still in a queue (re-checked in the `DELETE`, since followers add songs
-   concurrently). The repair pass recreates video rows missing for queued songs,
+   concurrently), and evicts favourites last, only past
+   `KARAOKE_CACHE_HARD_MAX_GB` (30). The repair pass recreates video rows missing for queued songs,
    re-downloads lost files and starts a ready song in idle rooms.
 5. Position reports (`position`) are a plain `UPDATE` without lock or NOTIFY:
    they are frequent and nobody needs a push for them. They only apply while
@@ -214,10 +231,11 @@ Invariants to keep:
 - Pages: `/`, `/display/{code}`, `/r/{code}`. htmx: `GET /r/{code}/search`,
   `GET /r/{code}/state` (the pushed fragments, on demand), `POST /r/{code}/name`
   (claim a name: 204 + cookies, or 409 `{detail, suggestion}`), `POST /r/{code}/do`
-  (any phone message as form fields; 204, maybe `HX-Trigger: {"toast": …}`).
+  (any phone message as form fields; 204, maybe `HX-Trigger: {"toast": …}`),
+  `POST /r/{code}/heart` (a `heart` message; answers with the ❤️ button).
 - WebSocket `/ws/{code}?role=display|guest&view=json|html`. Messages
   (`messages.py`) phone → server: `add`, `remove`, `move`, `skip`, `play`,
-  `pause`, `restart`, `volume`, `retry`, `photo_skip`, `photo_remove`, `react`
+  `pause`, `restart`, `volume`, `retry`, `heart`, `photo_skip`, `photo_remove`, `react`
   (`kind`, `count` 1-10; its `sender`, the throttle key, is set by the server:
   the phone's token, or the socket when it has none). Screen
   only: `ended`, `player`, `position`. Server → JSON clients: `state` (full
@@ -227,7 +245,7 @@ Invariants to keep:
 - Data on `/data` (owned by uid 1000, the container user): `songs/<video_id>.mp4`,
   `songs/.tmp/` (downloads in progress), `photos/<CODE>/<photo_id>`, `tmp/`
   (uploads in progress).
-- Tables: `rooms`, `queue_items`, `videos`, `photos`, `plays`, `guests`, `schema_migrations`.
+- Tables: `rooms`, `queue_items`, `videos`, `photos`, `plays`, `guests`, `favourites`, `schema_migrations`.
 
 ## Commands (from `karaoke/`)
 
@@ -242,7 +260,7 @@ uv run pytest -m integration -v   # real YouTube search + download (slow, networ
 
 Env: `KARAOKE_DATABASE_URL` or `KARAOKE_DB_USER/PASSWORD/HOST/PORT/NAME`,
 `KARAOKE_DATA_DIR`, `KARAOKE_PUBLIC_URL` (QR base URL), `KARAOKE_CHANNELS`,
-`KARAOKE_CACHE_MAX_GB`, `KARAOKE_MAX_HEIGHT`, `KARAOKE_HOST_PASSWORD` (empty =
+`KARAOKE_CACHE_MAX_GB`, `KARAOKE_CACHE_HARD_MAX_GB`, `KARAOKE_MAX_HEIGHT`, `KARAOKE_HOST_PASSWORD` (empty =
 anyone can create a room), `PORT`, `LOG_LEVEL`.
 
 ## Testing

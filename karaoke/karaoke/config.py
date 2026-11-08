@@ -28,6 +28,10 @@ class Settings:
     cache_max_gb: float = field(
         default_factory=lambda: float(os.environ.get("KARAOKE_CACHE_MAX_GB", "20"))
     )
+    # Favourites are only evicted past this higher size.
+    cache_hard_max_gb: float = field(
+        default_factory=lambda: float(os.environ.get("KARAOKE_CACHE_HARD_MAX_GB", "30"))
+    )
     max_height: int = field(
         default_factory=lambda: int(os.environ.get("KARAOKE_MAX_HEIGHT", "720"))
     )

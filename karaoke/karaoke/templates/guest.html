@@ -33,6 +33,8 @@
         <input class="field" id="q" name="q" type="search" placeholder="Titre, artiste ou lien YouTube…" autocomplete="off" enterkeyhint="search">
         <input type="hidden" id="everywhere" name="everywhere" value="0">
       </form>
+      {# Shown only before searching (see guest.css) #}
+      {{ state.favourites_panel() }}
       <div id="results">{% include "_results.html" %}</div>
     </section>
 

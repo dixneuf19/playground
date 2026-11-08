@@ -1,0 +1,56 @@
+{#
+  A song card and its buttons: search results, popular songs, favourites,
+  and the ❤️ of queued songs and of the player. Imported without context:
+  everything comes in as arguments, since the favourites list is also pushed.
+
+  heart: the ❤️ button. The favourites are shared by every room, so taking
+  one out asks first. The response is the button in its new state (search
+  results are not pushed); the queue and the favourites list also follow by push.
+  add: queues the song for this guest (`done` once they have it queued).
+#}
+{% macro heart(code, video_id, title, on) -%}
+<button class="heart{{ ' on' if on }}" aria-pressed="{{ 'true' if on else 'false' }}"
+  aria-label="{{ 'Retirer des favoris' if on else 'Ajouter aux favoris' }}"
+  hx-post="/r/{{ code }}/heart" hx-swap="outerHTML"
+  hx-vals='{{ {"type": "heart", "video_id": video_id, "on": not on}|tojson }}'
+  {% if on %}
+  hx-confirm="« {{ title }} » disparaîtra des favoris de tout le monde."
+  data-confirm-title="Retirer des favoris ?" data-confirm-yes="Retirer"
+  {% endif %}
+  >{{ "❤️" if on else "🤍" }}</button>
+{%- endmacro %}
+
+{% macro add(code, video_id, title, artist, cancelled, done) -%}
+<button class="add{{ ' done' if done }}" aria-label="Ajouter"
+  hx-post="/r/{{ code }}/do" hx-swap="none"
+  hx-vals='{{ {"type": "add", "video_id": video_id, "title": title, "artist": artist}|tojson }}'
+  {% if cancelled %}
+  hx-confirm="{{ cancelled }} Tu assumes de la chanter devant tout le monde ?"
+  data-confirm-title="🚫 Artiste cancel" data-confirm-yes="J'assume"
+  {% endif %}
+  data-added>{{ "✓" if done else "+" }}</button>
+{%- endmacro %}
+
+{#
+  cancelled: the reason, or None. ready: in the video cache. done: this guest
+  has it queued. hearted: a favourite. id: the card's element id, if any.
+#}
+{% macro card(code, video_id, title, artist, thumbnail, cancelled, ready, done, hearted,
+              curated=True, duration=None, plays=0, id=None) %}
+<div class="card song"{% if id %} id="{{ id }}"{% endif %}>
+  <img src="{{ thumbnail }}" alt="" loading="lazy">
+  <div class="meta">
+    <div class="t">{{ title }}</div>
+    <div class="a ellipsis">{{ artist }}</div>
+    <div class="tags">
+      {% if cancelled %}<span class="tag tag-cancel">🚫 Cancel</span>{% endif %}
+      {% if not curated %}<span class="tag tag-yt">YouTube</span>{% endif %}
+      {% if ready %}<span class="tag tag-ready">Prêt</span>{% endif %}
+      {% if plays %}<span class="tag">🎤 {{ plays }} fois</span>{% endif %}
+      {% if duration %}<span class="tag">{{ duration|duration }}</span>{% endif %}
+    </div>
+  </div>
+  {{ heart(code, video_id, title, hearted) }}
+  {{ add(code, video_id, title, artist, cancelled, done) }}
+</div>
+{% endmacro %}

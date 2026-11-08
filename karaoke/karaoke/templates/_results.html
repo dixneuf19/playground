@@ -3,6 +3,7 @@
   form's hidden `everywhere` field: once on all of YouTube, the next search
   stays there until the guest goes back to the catalogue or leaves the tab.
 #}
+{% import "_song.html" as song %}
 {% set search = "/r/" ~ code ~ "/search" %}
 {% if not initial %}
 <input type="hidden" id="everywhere" name="everywhere" value="{{ 1 if page.everywhere else 0 }}" hx-swap-oob="true">
@@ -16,29 +17,8 @@
 {% endmacro %}
 
 {% macro song_card(video_id, title, artist, thumbnail, curated=True, duration=None, plays=0) %}
-{% set done = video_id in added %}
-<div class="card song">
-  <img src="{{ thumbnail }}" alt="" loading="lazy">
-  <div class="meta">
-    <div class="t">{{ title }}</div>
-    <div class="a ellipsis">{{ artist }}</div>
-    <div class="tags">
-      {% if cancelled[video_id] %}<span class="tag tag-cancel">🚫 Cancel</span>{% endif %}
-      {% if not curated %}<span class="tag tag-yt">YouTube</span>{% endif %}
-      {% if video_id in cached %}<span class="tag tag-ready">Prêt</span>{% endif %}
-      {% if plays %}<span class="tag">🎤 {{ plays }} fois</span>{% endif %}
-      {% if duration %}<span class="tag">{{ duration|duration }}</span>{% endif %}
-    </div>
-  </div>
-  <button class="add{{ ' done' if done }}" aria-label="Ajouter"
-    hx-post="/r/{{ code }}/do" hx-swap="none"
-    hx-vals='{{ {"type": "add", "video_id": video_id, "title": title, "artist": artist}|tojson }}'
-    {% if cancelled[video_id] %}
-    hx-confirm="{{ cancelled[video_id] }} Tu assumes de la chanter devant tout le monde ?"
-    data-confirm-title="🚫 Artiste cancel" data-confirm-yes="J'assume"
-    {% endif %}
-    data-added>{{ "✓" if done else "+" }}</button>
-</div>
+{{ song.card(code, video_id, title, artist, thumbnail, cancelled[video_id], video_id in cached,
+             video_id in added, video_id in hearted, curated, duration, plays) }}
 {% endmacro %}
 
 {% if not page.query %}

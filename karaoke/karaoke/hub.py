@@ -20,8 +20,10 @@ import asyncpg
 from fastapi import WebSocket
 
 from karaoke.db import CHANNEL, Store
+from karaoke.favourites import Favourite
 from karaoke.loops import every
 from karaoke.rooms import Room
+from karaoke.views import room_videos
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +32,16 @@ ROOM_GONE = 4404  # close code: the page goes back home
 TRY_AGAIN = 1013  # close code: the page reconnects and gets the full state
 HEARTBEAT = 30  # seconds between presence updates (see db.NAME_RELEASE_SECONDS)
 
-RenderGuest = Callable[[Room, str], str]
+RenderGuest = Callable[[Room, str, set[str], list[Favourite] | None], str]
+
+
+@dataclass
+class Extras:
+    """What a phone shows besides the room: which of its songs are hearted,
+    and the favourites list when it changed (None: not part of this push)."""
+
+    hearted: set[str]
+    favourites: list[Favourite] | None
 
 
 @dataclass(eq=False)
@@ -63,6 +74,8 @@ class Hub:
         self._heart: asyncio.Task[None] | None = None
         # One push loop per room: pushes stay in order and bursts coalesce.
         self._dirty: set[str] = set()
+        # Rooms whose next push carries the favourites list (it changed).
+        self._favourites_dirty: set[str] = set()
         self._pushers: dict[str, asyncio.Task[None]] = {}
 
     async def start(self) -> None:
@@ -91,7 +104,8 @@ class Hub:
         if client.token:
             await self.store.touch_guests([(code, client.token)], time.time())
         names = await self._names(code, [client])
-        await client.ws.send_text(self._payload(room, client, names, {}))
+        extras = await self._extras(room, [client], with_favourites=True)
+        await client.ws.send_text(self._payload(room, client, names, extras, {}))
         return True
 
     def leave(self, code: str, client: Client) -> None:
@@ -138,11 +152,15 @@ class Hub:
         logger.warning("Lost the LISTEN connection, reconnecting")
         await self._listen()
         for code in list(self.clients):  # catch up on anything missed
-            self.push_state(code)
+            self.push_state(code, favourites=True)
 
     async def _dispatch(self, msg: dict[str, Any]) -> None:
         if msg.get("downloads"):
             self.on_downloads()
+            return
+        if msg.get("favourites"):  # shared by every room
+            for room_code in list(self.clients):
+                self.push_state(room_code, favourites=True)
             return
         code = msg.get("room", "")
         if "command" in msg:
@@ -154,11 +172,14 @@ class Hub:
 
     # --- state pushes -------------------------------------------------------
 
-    def push_state(self, code: str) -> None:
+    def push_state(self, code: str, favourites: bool = False) -> None:
         """Ask for a fresh state push. Changes arriving while a push is under
         way are folded into one more push, so phones never see an older state
-        after a newer one."""
+        after a newer one. `favourites`: also send the favourites list, which
+        plain room pushes leave out (it changes rarely and weighs a lot)."""
         self._dirty.add(code)
+        if favourites:
+            self._favourites_dirty.add(code)
         if code not in self._pushers:
             self._pushers[code] = asyncio.create_task(self._push_loop(code))
 
@@ -174,12 +195,15 @@ class Hub:
                         with contextlib.suppress(Exception):
                             await client.ws.close(code=ROOM_GONE)
                     return
+                with_favourites = code in self._favourites_dirty
+                self._favourites_dirty.discard(code)
                 clients = list(self.clients.get(code, ()))
                 names = await self._names(code, clients)
+                extras = await self._extras(room, clients, with_favourites)
                 rendered: dict[Any, str] = {}
                 await self._send(
                     [
-                        (c, code, self._payload(room, c, names, rendered))
+                        (c, code, self._payload(room, c, names, extras, rendered))
                         for c in clients
                     ]
                 )
@@ -194,11 +218,22 @@ class Hub:
             return {}
         return await self.store.guest_names(code)
 
+    async def _extras(
+        self, room: Room, clients: list[Client], with_favourites: bool
+    ) -> Extras:
+        if not any(c.html for c in clients):  # screens don't show favourites
+            return Extras(set(), None)
+        return Extras(
+            await self.store.hearted(room_videos(room)),
+            await self.store.favourites() if with_favourites else None,
+        )
+
     def _payload(
         self,
         room: Room,
         client: Client,
         names: dict[str, str],
+        extras: Extras,
         rendered: dict[Any, str],
     ) -> str:
         """What this client gets for this state, rendered once per kind."""
@@ -206,7 +241,7 @@ class Hub:
         key = ("html", name) if client.html else "json"
         if key not in rendered:
             rendered[key] = (
-                self.render_guest(room, name)
+                self.render_guest(room, name, extras.hearted, extras.favourites)
                 if client.html
                 else json.dumps({"type": "state", "room": room.snapshot()})
             )
