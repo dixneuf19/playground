@@ -15,26 +15,33 @@ hx-post="{{ do }}" hx-vals='{{ vals|tojson }}' hx-swap="none"
 {%- if confirm %} hx-confirm="{{ confirm }}" data-confirm-title="{{ title }}" data-confirm-yes="{{ yes }}"{% endif %}
 {%- endmacro %}
 
+{# Spans, not divs: it also goes inside the #now-mini button. #}
 {% macro now_meta() %}
 <img src="{{ c.thumbnail }}" alt="">
-<div class="meta">
-  <div class="label"><span class="eq"><i></i><i></i><i></i></span>{{ "En pause" if paused else "En cours" }}</div>
-  <div class="t ellipsis">{{ c.title }}</div>
-  <div class="muted ellipsis small">{{ c.singer }}{% if c.artist %} · {{ c.artist }}{% endif %}</div>
-</div>
+<span class="meta">
+  <span class="label"><span class="eq"><i></i><i></i><i></i></span>{{ "En pause" if paused else "En cours" }}</span>
+  <span class="t ellipsis">{{ c.title }}</span>
+  <span class="muted ellipsis small">{{ c.singer }}{% if c.artist %} · {{ c.artist }}{% endif %}</span>
+</span>
 {% endmacro %}
 
 {# On the search tab: tapping it opens the queue tab, where the controls are. #}
 {% macro now_playing() %}
-<div id="now-mini" class="now card{{ ' hidden' if not c }}{{ ' paused' if paused }}" data-view="queue" {{ o }}>
+<button type="button" id="now-mini" class="now card{{ ' hidden' if not c }}{{ ' paused' if paused }}" data-view="queue" {{ o }}>
   {% if c %}{{ now_meta() }}<span class="go" aria-hidden="true">›</span>{% endif %}
-</div>
+</button>
 {% endmacro %}
 
 {# Top of the queue tab: what plays and its controls, like a music app's player. #}
 {% macro player() %}
-<div id="player" class="now player card{{ ' hidden' if not c }}{{ ' paused' if paused }}" {{ o }}>
-  {% if c %}
+<div id="player" class="now player card{{ ' hidden' if not c and not room.queue }}{{ ' paused' if paused }}" {{ o }}>
+  {% if not c and room.queue %}
+  {% if room.queue|rejectattr("status", "equalto", "error")|first %}
+  <p class="waiting muted"><span class="spinner small-spinner"></span> Rien ne joue pour l'instant : la prochaine chanson se prépare…</p>
+  {% else %}
+  <p class="waiting muted">Rien ne joue : les chansons de la file n'ont pas pu être téléchargées.</p>
+  {% endif %}
+  {% elif c %}
   <div class="row">{{ now_meta() }}</div>
   <div class="controls">
     <button class="ctl" aria-label="Recommencer" {{ action({"type": "restart"}) }}>⟲</button>

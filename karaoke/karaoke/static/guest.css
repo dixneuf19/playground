@@ -78,7 +78,9 @@ main { padding: 16px; max-width: 640px; margin: 0 auto; }
 .sortable-chosen { box-shadow: var(--shadow); transform: scale(1.02); }
 
 /* player: what plays and its controls, on top of the queue tab */
-#now-mini { cursor: pointer; }
+#now-mini { width: 100%; text-align: left; }
+.now .t, .now .meta > .small { display: block; }
+.player .waiting { margin: 0; display: flex; gap: 8px; align-items: center; font-size: 0.9rem; }
 #now-mini .go { color: var(--muted); font-size: 1.6rem; line-height: 1; flex: none; }
 .player { flex-direction: column; align-items: stretch; }
 .player .row { display: flex; gap: 12px; align-items: center; }

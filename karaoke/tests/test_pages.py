@@ -2,6 +2,7 @@
 pushed over the WebSocket."""
 
 import json
+import re
 from urllib.parse import quote
 
 from fastapi.testclient import TestClient
@@ -163,11 +164,26 @@ def test_search_renders_results(client: TestClient) -> None:
     assert client.get("/r/ZZZZ/search", params={"q": "x"}).status_code == 404
 
 
+def _tag(page: str, element_id: str) -> tuple[str, set[str]]:
+    """The opening tag of the element with that id, and its classes."""
+    tag = re.search(rf'<(\w+)[^>]*\bid="{element_id}"[^>]*>', page)
+    assert tag, element_id
+    classes = re.search(r'\bclass="([^"]*)"', tag.group(0))
+    return tag.group(0), set(classes.group(1).split()) if classes else set()
+
+
 def test_the_queue_tab_holds_the_player(client: TestClient) -> None:
     code = _room(client)
     page = _as(client, code, "Léa").get(f"/r/{code}").text
     assert 'data-view="stage"' not in page and 'id="stage"' not in page
-    assert 'id="player" class="now player card hidden"' in page  # nothing plays
+    assert "hidden" in _tag(page, "player")[1]  # empty room: nothing to show
+
+    # A song still downloading: the player says one is coming
+    client.post(f"/r/{code}/do", data={"type": "add", "video_id": "bcdefghijkl"})
+    page = client.get(f"/r/{code}").text
+    assert "hidden" not in _tag(page, "player")[1]
+    assert "la prochaine chanson se prépare" in page
+
     svc = services(client)
     path = svc.library.path_for(VID)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -184,5 +200,8 @@ def test_the_queue_tab_holds_the_player(client: TestClient) -> None:
     ]
     for control in ("Recommencer", "Pause", "Suivante", 'id="volume"'):
         assert control in player
-    # The search tab's mini card leads to it
-    assert 'id="now-mini" class="now card" data-view="queue"' in page
+    assert "se prépare" not in player
+    # The search tab's mini card is a button leading to it
+    tag, classes = _tag(page, "now-mini")
+    assert tag.startswith("<button") and 'data-view="queue"' in tag
+    assert "hidden" not in classes
