@@ -124,14 +124,6 @@ $("q").addEventListener("input", () => {
   if (!$("q").value.trim()) { $("everywhere").value = "0"; $("search-form").requestSubmit(); }
 });
 $("search-form").addEventListener("submit", () => $("q").blur());
-document.addEventListener("click", async (e) => {
-  if (!e.target.closest("[data-paste]")) return;
-  let text = "";
-  try { text = (await navigator.clipboard.readText()).trim(); } catch {}
-  if (!text) { $("q").focus(); toast("Colle le lien dans la barre de recherche"); return; }
-  $("q").value = text;
-  $("search-form").requestSubmit();
-});
 
 // --- live connection ---------------------------------------------------------
 // hx-ws reconnects by itself (closes 1001/1005/1006/1011-1014), and pauses
