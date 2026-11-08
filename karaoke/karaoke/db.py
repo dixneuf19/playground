@@ -21,7 +21,7 @@ from karaoke.photos import (
     Photo,
     PhotoQueue,
 )
-from karaoke.rooms import ItemStatus, QueueItem, Room, generate_code
+from karaoke.rooms import ItemStatus, QueueItem, Room, generate_code, thumbnail_url
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,40 @@ MIGRATIONS: list[str] = [
     ALTER TABLE videos DROP COLUMN IF EXISTS claimed_by;
     ALTER TABLE videos DROP COLUMN IF EXISTS heartbeat;
     """,
+    # 3: songs started on a screen, across rooms, for the "popular" list.
+    """
+    CREATE TABLE IF NOT EXISTS plays (
+        id        bigserial PRIMARY KEY,
+        video_id  text NOT NULL,
+        title     text NOT NULL DEFAULT '',
+        artist    text NOT NULL DEFAULT '',
+        played_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS plays_played_at ON plays (played_at);
+    """,
 ]
+
+POPULAR_DAYS = 30
+POPULAR_LIMIT = 20
+
+
+@dataclass
+class PopularSong:
+    """A song played recently in any room, shaped like a search result for
+    the phone's song cards."""
+
+    video_id: str
+    title: str
+    artist: str
+    plays: int
+
+    curated = True
+    duration = None
+    channel = ""
+
+    @property
+    def thumbnail(self) -> str:
+        return thumbnail_url(self.video_id)
 
 
 @dataclass
@@ -349,6 +382,12 @@ class Store:
                 "UPDATE videos SET last_used = now() WHERE video_id = $1",
                 room.current.video_id,
             )
+            await conn.execute(
+                "INSERT INTO plays (video_id, title, artist) VALUES ($1, $2, $3)",
+                room.current.video_id,
+                room.current.title,
+                room.current.artist,
+            )
         # Photos that left the pending queue: shown (now on screen) or cancelled
         remaining = {p.id for p in room.photos.pending}
         for photo_id in tx._loaded_pending - remaining:
@@ -372,6 +411,34 @@ class Store:
             ttl_seconds,
         )
         return [r["code"] for r in rows]
+
+    # --- plays --------------------------------------------------------------
+
+    async def popular(self) -> list[PopularSong]:
+        """The most played songs of the last weeks, across rooms; ties go to
+        the most recent. Title and artist come from the latest play."""
+        rows = await self.pool.fetch(
+            """SELECT video_id, count(*) AS plays,
+                      (array_agg(title ORDER BY played_at DESC))[1] AS title,
+                      (array_agg(artist ORDER BY played_at DESC))[1] AS artist
+               FROM plays
+               WHERE played_at > now() - make_interval(days => $1)
+               GROUP BY video_id
+               ORDER BY plays DESC, max(played_at) DESC
+               LIMIT $2""",
+            POPULAR_DAYS,
+            POPULAR_LIMIT,
+        )
+        return [
+            PopularSong(r["video_id"], r["title"], r["artist"], r["plays"])
+            for r in rows
+        ]
+
+    async def prune_plays(self) -> None:
+        await self.pool.execute(
+            "DELETE FROM plays WHERE played_at < now() - make_interval(days => $1)",
+            POPULAR_DAYS,
+        )
 
     async def room_codes(self) -> set[str]:
         return {r["code"] for r in await self.pool.fetch("SELECT code FROM rooms")}

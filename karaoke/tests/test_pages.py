@@ -205,3 +205,35 @@ def test_the_queue_tab_holds_the_player(client: TestClient) -> None:
     tag, classes = _tag(page, "now-mini")
     assert tag.startswith("<button") and 'data-view="queue"' in tag
     assert "hidden" not in classes
+
+
+def test_search_intro_shows_popular_songs(client: TestClient) -> None:
+    svc = services(client)
+    path = svc.library.path_for(VID)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"fake mp4")
+    portal = client.portal
+    assert portal is not None
+    portal.call(svc.store.video_status, VID)
+    portal.call(svc.store.finish_download, VID, True, "Song", 1)
+    code = _room(client)
+    _as(client, code, "Léa")
+    assert "Les plus chantées" not in client.get(f"/r/{code}").text
+
+    # Ready, so it starts at once: that's a play
+    add = {"type": "add", "video_id": VID, "title": "Les lacs du Connemara"}
+    client.post(f"/r/{code}/do", data={**add, "artist": "Michel Sardou"})
+    for html in (client.get(f"/r/{code}").text, client.get(f"/r/{code}/search").text):
+        assert "Les plus chantées" in html
+        assert "Les lacs du Connemara" in html
+        assert "🎤 1 fois" in html
+        assert "Prêt" in html
+        assert 'data-confirm-yes="J\'assume"' in html  # cancelled: asks first
+        assert "✓" in html  # Léa is singing it
+
+    async def nothing(*_args: object) -> list[SearchResult]:
+        return []
+
+    setattr(svc.searcher, "_search", nothing)  # noqa: B010
+    html = client.get(f"/r/{code}/search", params={"q": "x"}).text
+    assert "Les plus chantées" not in html  # a search replaces them

@@ -38,6 +38,10 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
 - **Resume after a screen reload**: the screen reports its position every 5 s; a
   reloaded screen resumes mid-song with a 3 s rewind and skips the "Au tour de…"
   interstitial (6 s, only for fresh songs).
+- **Popular songs as inspiration**: before any search, the phone lists the 20
+  songs most played over the last 30 days across all rooms (ties: most recent),
+  with the usual one-tap add. A play is recorded in `plays` when a song becomes
+  current (`Store._save`), skipped or not; the leader's prune drops older rows.
 - Out of scope: lights; scraping or pirating KaraFun's paid catalogue.
 
 ## Code map (`karaoke/karaoke/`)
@@ -47,7 +51,7 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
 | `rooms.py`, `photos.py` | Pure state and logic, no I/O (Room, QueueItem, PhotoQueue, photo slot timing). Unit-tested directly. Methods that may do nothing return a bool. |
 | `messages.py` | Pydantic models of every phone/screen message, one per `type`. All input validation lives here. |
 | `actions.py` | `Actions.handle`: applies a message to a room inside `room_tx` (a `match` on the message class). |
-| `db.py` | `Store`: Postgres via asyncpg. `MIGRATIONS`, `room_tx`, `load_room`, videos/photos tables, NOTIFY. |
+| `db.py` | `Store`: Postgres via asyncpg. `MIGRATIONS`, `room_tx`, `load_room`, videos/photos/plays tables, NOTIFY. |
 | `hub.py` | This replica's sockets (`Client`), the LISTEN connection and the per-room push loop. |
 | `worker.py` | Leader-only background work: downloads, photo rotation, repair, pruning. Owns the `Leadership`. |
 | `leader.py` | Leader election with a Postgres advisory lock held on a dedicated connection. |
@@ -185,7 +189,7 @@ Invariants to keep:
 - Data on `/data` (owned by uid 1000, the container user): `songs/<video_id>.mp4`,
   `songs/.tmp/` (downloads in progress), `photos/<CODE>/<photo_id>`, `tmp/`
   (uploads in progress).
-- Tables: `rooms`, `queue_items`, `videos`, `photos`, `schema_migrations`.
+- Tables: `rooms`, `queue_items`, `videos`, `photos`, `plays`, `schema_migrations`.
 
 ## Commands (from `karaoke/`)
 

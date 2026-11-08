@@ -102,3 +102,51 @@ def test_migrations_upgrade_a_database_from_before_they_were_numbered(
         assert "claimed_by" not in columns
 
     _run(make_settings, test)
+
+
+async def _sing(store: Store, code: str, video_id: str, title: str) -> None:
+    async with store.room_tx(code) as tx:
+        assert tx is not None
+        tx.room.add(
+            QueueItem(
+                video_id=video_id,
+                title=title,
+                artist="a",
+                singer="s",
+                thumbnail="",
+                status="ready",
+            )
+        )
+        tx.room.advance()
+
+
+def test_popular_songs_count_plays_across_rooms(
+    make_settings: Callable[..., Settings],
+) -> None:
+    async def test(store: Store) -> None:
+        first, second = await store.create_room(), await store.create_room()
+        await _sing(store, first, VID, "old title")
+        await _sing(store, second, VID, "Connemara")
+        await _sing(store, first, "bbbbbbbbbbb", "B")
+        await _sing(store, second, "ccccccccccc", "C")
+        # A save that doesn't start a new song is not a play
+        async with store.room_tx(first) as tx:
+            assert tx is not None
+            tx.room.set_volume(0.5)
+        popular = await store.popular()
+        assert [(p.video_id, p.plays) for p in popular] == [
+            (VID, 2),
+            ("ccccccccccc", 1),  # ties: most recent first
+            ("bbbbbbbbbbb", 1),
+        ]
+        assert popular[0].title == "Connemara"  # from the latest play
+
+        await store.pool.execute(
+            "UPDATE plays SET played_at = now() - interval '31 days' "
+            "WHERE video_id <> 'ccccccccccc'"
+        )
+        assert [p.video_id for p in await store.popular()] == ["ccccccccccc"]
+        await store.prune_plays()
+        assert await store.pool.fetchval("SELECT count(*) FROM plays") == 1
+
+    _run(make_settings, test)
