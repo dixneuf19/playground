@@ -33,11 +33,13 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   holding no name is "Anonyme"). Entering a room opens the
   name sheet, prefilled with the last name used anywhere (`karaoke_name`
   cookie, a suggestion only); it posts to `/r/{code}/name`. A name held by
-  another phone is refused with a "Léa 2" suggestion, unless that phone has had
+  another phone is refused, unless that phone has had
   no socket open for 2 minutes (`db.NAME_RELEASE_SECONDS`): then the new phone
   just takes it, with its photos and "moi" (a guest on a new phone, or with
-  cleared cookies). Names are compared exactly as typed, not normalized.
-  Tapping the name in the header changes it for this room: the old name is
+  cleared cookies). On a refusal the sheet names a free variant ("Léa 2") in
+  its error text only: the field keeps what the guest typed, selected to
+  retype, so a quick second tap can't submit a name they didn't choose.
+  Names are compared exactly as typed, not normalized. Tapping the name in the header changes it for this room: the old name is
   free at once, and the phone's queued songs and pending photos move to the
   new one (`Actions.claim_name` -> `Room.rename_guest`, in one `room_tx`, which
   also serializes claims in a room). The song playing keeps its name.

@@ -36,7 +36,10 @@ $("name-form").onsubmit = async (e) => {
     // French spacing, and the suggested name kept on one line
     (body.suggestion ? `. Et «\u00a0${body.suggestion.replaceAll(" ", "\u00a0")}\u00a0»\u00a0?` : "");
   $("name-error").classList.remove("hidden");
-  if (body.suggestion) $("name-input").value = body.suggestion;
+  // Keep what they typed, selected to retype: a prefilled suggestion got
+  // submitted by mistake with a quick second tap.
+  $("name-input").focus();
+  $("name-input").select();
 };
 // Delegated: the button is replaced by pushes.
 document.addEventListener("click", (e) => { if (e.target.closest("#me-btn")) askName(); });
