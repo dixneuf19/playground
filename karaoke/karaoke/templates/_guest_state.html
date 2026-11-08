@@ -175,8 +175,7 @@ hx-post="{{ do }}" hx-vals='{{ vals|tojson }}' hx-swap="none"
     <div class="ph" id="ph-{{ p.id }}">
       <img src="/photos/{{ room.code }}/{{ p.id }}" alt="" loading="lazy">
       <span class="n">{{ "la suivante" if n == 1 else "n°" ~ n }}</span>
-      <button class="x" aria-label="Annuler" {{ action({"type": "photo_remove", "photo_id": p.id},
-        "Elle ne passera pas à l'écran.", "Retirer la photo ?", "Retirer") }}>✕</button>
+      <button class="x" aria-label="Annuler" {{ action({"type": "photo_remove", "photo_id": p.id}) }}>✕</button>
     </div>
     {% endfor %}
   </div>

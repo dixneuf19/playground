@@ -320,9 +320,7 @@ def test_only_the_uploader_sees_their_waiting_photos(client: TestClient) -> None
     claim(client, code, "Léa")
     client.post(url, content=JPEG)  # goes on screen
     waiting = client.post(url, content=JPEG).json()["id"]
-    mine = client.get(f"/r/{code}/state").text
-    assert f'id="ph-{waiting}"' in mine
-    assert 'data-confirm-title="Retirer la photo ?"' in mine  # cancelling asks first
+    assert f'id="ph-{waiting}"' in client.get(f"/r/{code}/state").text
     tom = claim(phone(client), code, "Tom")
     assert waiting not in tom.get(f"/r/{code}/state").text
     # Tom can't cancel it: the uploader is his phone's name, not the form
