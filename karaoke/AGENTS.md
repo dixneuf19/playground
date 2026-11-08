@@ -60,7 +60,7 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
 | `config.py` | `Settings` from `KARAOKE_*` env vars. |
 | `app.py` | Wiring only: builds the services, includes the routers. |
 | `templates/` | `guest.html` (+ `_guest_state.html` fragments, `_guest_push.html`, `_results.html`), `display.html`, `index.html`. |
-| `static/` | `guest.js`/`guest.css`, `display.js`/`display.css`, `common.js` (screen socket + `esc`), `app.css`, `vendor/` (htmx, its ws extension, idiomorph, SortableJS: pinned, version in the file name). No build step. |
+| `static/` | `guest.js`/`guest.css`, `display.js`/`display.css`, `common.js` (screen socket + `esc`), `app.css`. htmx, its ws extension, idiomorph and SortableJS come from jsDelivr in `guest.html`, pinned with an integrity hash. No build step. |
 
 ## Frontend
 
@@ -80,6 +80,9 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   fed with JSON states and commands. Keep it that way.
 - Pages reference static files through `static('name')`, which appends a
   content hash: no stale JS after a deploy.
+- CDN libraries are pinned to an exact version with a `sha384` integrity hash.
+  To bump one, change the version and recompute the hash:
+  `curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A`.
 
 ## How multi-replica state works
 

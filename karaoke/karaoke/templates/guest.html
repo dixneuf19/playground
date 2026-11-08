@@ -84,10 +84,11 @@
 
   <div class="toast" id="toast"></div>
 
-<script src="{{ static('vendor/htmx-2.0.11.min.js') }}"></script>
-<script src="{{ static('vendor/htmx-ext-ws-2.0.4.min.js') }}"></script>
-<script src="{{ static('vendor/idiomorph-ext-0.8.0.min.js') }}"></script>
-<script src="{{ static('vendor/sortable-1.15.6.min.js') }}"></script>
+{# Pinned versions; the integrity hash makes the browser refuse any other file. #}
+<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.11/dist/htmx.min.js" integrity="sha384-2OatzQy1H+Zd/IIrjr1TcuDGqLXeHhbooAyJY1KdQMKnr4LZ22k31GBLdYKHmVjg" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/htmx-ext-ws@2.0.4/dist/ws.min.js" integrity="sha384-1RwI/nvUSrMRuNj7hX1+27J8XDdCoSLf0EjEyF69nacuWyiJYoQ/j39RT1mSnd2G" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/idiomorph@0.8.0/dist/idiomorph-ext.min.js" integrity="sha384-+iBk70O0UWQdSjXQSQ7amSxXCrsWq/6UOtvC9rDo0p7telbTSOyttExq6QCFBzNk" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js" integrity="sha384-HZZ/fukV+9G8gwTNjN7zQDG0Sp7MsZy5DDN6VfY3Be7V9dvQpEpR2jF2HlyFUUjU" crossorigin="anonymous"></script>
 <script src="{{ static('guest.js') }}"></script>
 </body>
 </html>
