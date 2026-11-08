@@ -197,7 +197,13 @@ def test_pushed_fragments_are_personal_and_escaped(client: TestClient) -> None:
     assert "&lt;script&gt;" in pushed and "<script>" not in pushed
     assert "tag-me" in pushed  # her own song
     tom = claim(phone(client), code, "Tom")
-    assert "tag-me" not in tom.get(f"/r/{code}/state").text
+    theirs = tom.get(f"/r/{code}/state").text
+    assert "tag-me" not in theirs
+    # Removing a song asks first, her own included
+    for html, singer in ((pushed, "toi"), (theirs, "Léa")):
+        assert f"chantée par {singer}, sortira de la file." in html
+        assert 'data-confirm-title="Retirer la chanson ?"' in html
+        assert 'data-confirm-yes="Retirer"' in html
 
 
 def _youtube(client: TestClient) -> None:
@@ -314,7 +320,9 @@ def test_only_the_uploader_sees_their_waiting_photos(client: TestClient) -> None
     claim(client, code, "Léa")
     client.post(url, content=JPEG)  # goes on screen
     waiting = client.post(url, content=JPEG).json()["id"]
-    assert f'id="ph-{waiting}"' in client.get(f"/r/{code}/state").text
+    mine = client.get(f"/r/{code}/state").text
+    assert f'id="ph-{waiting}"' in mine
+    assert 'data-confirm-title="Retirer la photo ?"' in mine  # cancelling asks first
     tom = claim(phone(client), code, "Tom")
     assert waiting not in tom.get(f"/r/{code}/state").text
     # Tom can't cancel it: the uploader is his phone's name, not the form

@@ -107,12 +107,9 @@ hx-post="{{ do }}" hx-vals='{{ vals|tojson }}' hx-swap="none"
         {% endif %}
       </div>
       {{ song.heart(room.code, i.video_id, i.title, i.artist, i.video_id in hearted) }}
-      {% if mine %}
-      <button class="x" aria-label="Retirer" {{ action({"type": "remove", "item_id": i.id}) }}>✕</button>
-      {% else %}
       <button class="x" aria-label="Retirer" {{ action({"type": "remove", "item_id": i.id},
-        "« " ~ i.title ~ " » a été choisie par " ~ i.singer ~ ".", "Retirer cette chanson ?", "Retirer") }}>✕</button>
-      {% endif %}
+        "« " ~ i.title ~ " », chantée par " ~ ("toi" if mine else i.singer) ~ ", sortira de la file.",
+        "Retirer la chanson ?", "Retirer") }}>✕</button>
     </div>
     {% endfor %}
   </div>
@@ -178,7 +175,8 @@ hx-post="{{ do }}" hx-vals='{{ vals|tojson }}' hx-swap="none"
     <div class="ph" id="ph-{{ p.id }}">
       <img src="/photos/{{ room.code }}/{{ p.id }}" alt="" loading="lazy">
       <span class="n">{{ "la suivante" if n == 1 else "n°" ~ n }}</span>
-      <button class="x" aria-label="Annuler" {{ action({"type": "photo_remove", "photo_id": p.id}) }}>✕</button>
+      <button class="x" aria-label="Annuler" {{ action({"type": "photo_remove", "photo_id": p.id},
+        "Elle ne passera pas à l'écran.", "Retirer la photo ?", "Retirer") }}>✕</button>
     </div>
     {% endfor %}
   </div>
