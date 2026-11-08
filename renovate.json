@@ -1,11 +1,10 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["local>dixneuf19/renovate-presets"],
-  "gitIgnoredAuthors": ["41898282+github-actions[bot]@users.noreply.github.com"],
   "customManagers": [
     {
       "customType": "regex",
-      "description": "npm packages loaded from jsDelivr in karaoke templates; the karaoke-sri workflow then fixes their integrity hashes",
+      "description": "npm packages loaded from jsDelivr in karaoke templates; their integrity hashes are updated by hand (make sri), CI checks them",
       "managerFilePatterns": ["/^karaoke/karaoke/templates/.+\\.html$/"],
       "matchStrings": [
         "https://cdn\\.jsdelivr\\.net/npm/(?<depName>[a-z0-9][a-z0-9._-]*)@(?<currentValue>\\d+\\.\\d+\\.\\d+)/"

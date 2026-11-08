@@ -87,9 +87,9 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   content hash: no stale JS after a deploy.
 - CDN libraries are pinned to an exact version with a `sha384` integrity hash.
   Renovate bumps the versions (custom regex manager on jsDelivr URLs in
-  `renovate.json`); the `karaoke-sri` workflow commits the new hashes on its
-  branch and reruns the tests, which include `make check-sri`. By hand: change
-  the version, then `make sri`.
+  `renovate.json`); CI's `make check-sri` then fails on its PR, which blocks
+  the automerge, until someone runs `make sri` on that branch and pushes the
+  new hashes. Nothing commits them automatically. By hand: change the version, `make sri`.
 
 ## How multi-replica state works
 
