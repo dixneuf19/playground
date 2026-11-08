@@ -183,4 +183,5 @@ class Worker:
         for code in await self.store.prune_rooms(ROOM_TTL_SECONDS):
             logger.info("Room %s expired", code)
         self.photos.prune(await self.store.room_codes())
+        await self.store.prune_plays()
         self.library.clean_tmp()

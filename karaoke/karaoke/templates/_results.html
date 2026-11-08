@@ -15,6 +15,32 @@
 <p class="muted paste-hint">ou colle directement le lien de la vidéo 🔗</p>
 {% endmacro %}
 
+{% macro song_card(video_id, title, artist, thumbnail, curated=True, duration=None, plays=0) %}
+{% set done = video_id in added %}
+<div class="card song">
+  <img src="{{ thumbnail }}" alt="" loading="lazy">
+  <div class="meta">
+    <div class="t">{{ title }}</div>
+    <div class="a ellipsis">{{ artist }}</div>
+    <div class="tags">
+      {% if cancelled[video_id] %}<span class="tag tag-cancel">🚫 Cancel</span>{% endif %}
+      {% if not curated %}<span class="tag tag-yt">YouTube</span>{% endif %}
+      {% if video_id in cached %}<span class="tag tag-ready">Prêt</span>{% endif %}
+      {% if plays %}<span class="tag">🎤 {{ plays }} fois</span>{% endif %}
+      {% if duration %}<span class="tag">{{ duration|duration }}</span>{% endif %}
+    </div>
+  </div>
+  <button class="add{{ ' done' if done }}" aria-label="Ajouter"
+    hx-post="/r/{{ code }}/do" hx-swap="none"
+    hx-vals='{{ {"type": "add", "video_id": video_id, "title": title, "artist": artist}|tojson }}'
+    {% if cancelled[video_id] %}
+    hx-confirm="{{ cancelled[video_id] }} Tu assumes de la chanter devant tout le monde ?"
+    data-confirm-title="🚫 Artiste cancel" data-confirm-yes="J'assume"
+    {% endif %}
+    data-added>{{ "✓" if done else "+" }}</button>
+</div>
+{% endmacro %}
+
 {% if not page.query %}
 <div class="intro-search">
   <div class="big">🎶</div>
@@ -25,6 +51,12 @@
     <div style="margin-top:12px"><button class="btn btn-ghost" data-paste>📋 Coller un lien</button></div>
   </div>
 </div>
+{% if popular %}
+<div class="section-title">🔥 Les plus chantées en ce moment</div>
+<div class="list">
+  {% for p in popular %}{{ song_card(p.video_id, p.title, p.artist, p.thumbnail, plays=p.plays) }}{% endfor %}
+</div>
+{% endif %}
 {% else %}
 <div class="scope muted">
   {% if page.everywhere %}
@@ -40,30 +72,7 @@
 {% endif %}
 
 <div class="list">
-  {% for r in page.results %}
-  {% set done = r.video_id in added %}
-  <div class="card song">
-    <img src="{{ r.thumbnail }}" alt="" loading="lazy">
-    <div class="meta">
-      <div class="t">{{ r.title }}</div>
-      <div class="a ellipsis">{{ r.artist or r.channel }}</div>
-      <div class="tags">
-        {% if cancelled[r.video_id] %}<span class="tag tag-cancel">🚫 Cancel</span>{% endif %}
-        {% if not r.curated %}<span class="tag tag-yt">YouTube</span>{% endif %}
-        {% if r.video_id in cached %}<span class="tag tag-ready">Prêt</span>{% endif %}
-        {% if r.duration %}<span class="tag">{{ r.duration|duration }}</span>{% endif %}
-      </div>
-    </div>
-    <button class="add{{ ' done' if done }}" aria-label="Ajouter"
-      hx-post="/r/{{ code }}/do" hx-swap="none"
-      hx-vals='{{ {"type": "add", "video_id": r.video_id, "title": r.title, "artist": r.artist or r.channel}|tojson }}'
-      {% if cancelled[r.video_id] %}
-      hx-confirm="{{ cancelled[r.video_id] }} Tu assumes de la chanter devant tout le monde ?"
-      data-confirm-title="🚫 Artiste cancel" data-confirm-yes="J'assume"
-      {% endif %}
-      data-added>{{ "✓" if done else "+" }}</button>
-  </div>
-  {% endfor %}
+  {% for r in page.results %}{{ song_card(r.video_id, r.title, r.artist or r.channel, r.thumbnail, r.curated, r.duration) }}{% endfor %}
 </div>
 
 {% if not page.results and page.strong %}
