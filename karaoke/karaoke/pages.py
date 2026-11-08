@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import ValidationError
 
+from karaoke.actions import HeartRefusedError
 from karaoke.api import room_or_404
 from karaoke.cancelled import cancel_reason
 from karaoke.context import (
@@ -23,10 +24,17 @@ from karaoke.context import (
     new_token,
     room_cookie,
 )
-from karaoke.messages import MAX_NAME, Add, clean_text, from_guest, parse
+from karaoke.messages import MAX_NAME, Add, Heart, clean_text, from_guest, parse
 from karaoke.rooms import Room
 from karaoke.search import SearchPage
-from karaoke.views import guest_state, render_guest_state, templates
+from karaoke.views import (
+    guest_state,
+    queued_by,
+    render_guest_state,
+    render_heart,
+    room_videos,
+    templates,
+)
 
 router = APIRouter()
 
@@ -43,14 +51,16 @@ async def results(svc: Svc, room: Room, me: str, found: SearchPage) -> dict[str,
     popular = [] if found.query else await svc.store.popular()
     songs = [(r.video_id, r.artist or r.channel, r.title) for r in found.results]
     songs += [(p.video_id, p.artist, p.title) for p in popular]
-    mine = [room.current, *room.queue] if room.current else room.queue
+    ids = [vid for vid, _, _ in songs]
     return {
         "code": room.code,
         "page": found,
         "popular": popular,
-        "cached": await svc.store.cached([vid for vid, _, _ in songs]),
+        "cached": await svc.store.cached(ids),
         "cancelled": {vid: cancel_reason(a, t) for vid, a, t in songs},
-        "added": {i.video_id for i in mine if i.singer == me},
+        "added": queued_by(room, me),
+        # the room's songs too: the phone page renders both from one context
+        "hearted": await svc.store.hearted(ids + room_videos(room)),
     }
 
 
@@ -101,13 +111,15 @@ async def guest(
     old = cookie_text(request, room_cookie(room.code))
     if not me and old and await svc.actions.claim_name(room.code, token, old):
         me = old
+    found = await svc.searcher.find("", everywhere=False)
+    intro = await results(svc, room, me, found)
+    context = guest_state(room, me, intro["hearted"], await svc.store.favourites())
     response = page(
         request,
         "guest.html",
-        **guest_state(room, me),
+        **(context | intro),
         oob=False,
         suggested=me or old or last,
-        **await results(svc, room, me, await svc.searcher.find("", everywhere=False)),
         initial=True,  # the search intro, inside the page
     )
     _set_cookies(svc, response, room.code, token)
@@ -141,11 +153,13 @@ async def claim_name(code: str, request: Request, svc: Svc) -> Response:
 
 @router.get("/r/{code}/state", response_class=HTMLResponse)
 async def guest_fragments(code: str, svc: Svc, me: GuestName) -> HTMLResponse:
-    """The pushed fragments, on demand (after a drag held pushes back)."""
+    """The pushed fragments, on demand (after a drag held pushes back).
+    Without the favourites list, like a room push."""
     room = await svc.store.load_room(code)
     if room is None:
         raise HTTPException(404, "Salle introuvable")
-    return HTMLResponse(render_guest_state(room, me), headers=NO_CACHE)
+    hearted = await svc.store.hearted(room_videos(room))
+    return HTMLResponse(render_guest_state(room, me, hearted, None), headers=NO_CACHE)
 
 
 @router.get("/r/{code}/search", response_class=HTMLResponse)
@@ -163,6 +177,26 @@ async def search(
     found = await svc.searcher.find(q, bool(everywhere))
     return templates.TemplateResponse(
         request, "_results.html", await results(svc, room, me, found)
+    )
+
+
+@router.post("/r/{code}/heart", response_class=HTMLResponse)
+async def heart(code: str, request: Request, svc: Svc) -> HTMLResponse:
+    """The ❤️ button: answers with the button in its new state, since search
+    results are not pushed. Phones showing the favourites get them by push."""
+    code = await room_or_404(svc, code)
+    try:
+        msg = parse(dict(await request.form()))
+    except ValidationError as e:
+        raise HTTPException(422, "Requête invalide") from e
+    if not isinstance(msg, Heart):
+        raise HTTPException(422, "Requête invalide")
+    try:
+        title = await svc.actions.heart(msg)
+    except HeartRefusedError as e:
+        raise HTTPException(409, str(e)) from e
+    return HTMLResponse(
+        render_heart(code, msg.video_id, title, msg.on), headers=NO_CACHE
     )
 
 

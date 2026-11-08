@@ -5,6 +5,7 @@
   drags survive). Every action posts to /r/<code>/do; the new state comes back
   by push. Import "with context": the macros read room, me and oob.
 #}
+{% import "_song.html" as song %}
 {% set o = 'hx-swap-oob="outerMorph"'|safe if oob else '' %}
 {% set do = "/r/" ~ room.code ~ "/do" %}
 {% set c = room.current %}
@@ -47,7 +48,7 @@ hx-post="{{ do }}" hx-vals='{{ vals|tojson }}' hx-swap="none"
   <p class="waiting muted">Rien ne joue : les chansons de la file n'ont pas pu être téléchargées.</p>
   {% endif %}
   {% elif c %}
-  <div class="row">{{ now_meta() }}</div>
+  <div class="row">{{ now_meta() }}{{ song.heart(room.code, c.video_id, c.title, c.video_id in hearted) }}</div>
   <div class="controls">
     <button class="ctl" aria-label="Recommencer" {{ action({"type": "restart"}) }}>⟲</button>
     <button class="ctl main" aria-label="{{ 'Lecture' if paused else 'Pause' }}"
@@ -103,6 +104,7 @@ hx-post="{{ do }}" hx-vals='{{ vals|tojson }}' hx-swap="none"
         <div class="bar"><i style="width:{{ (i.progress * 100)|round|int }}%"></i></div>
         {% endif %}
       </div>
+      {{ song.heart(room.code, i.video_id, i.title, i.video_id in hearted) }}
       {% if mine %}
       <button class="x" aria-label="Retirer" {{ action({"type": "remove", "item_id": i.id}) }}>✕</button>
       {% else %}
@@ -120,6 +122,21 @@ hx-post="{{ do }}" hx-vals='{{ vals|tojson }}' hx-swap="none"
   {% elif room.queue|length > 1 %}
   <p class="muted hint">Maintiens ⠿ et glisse pour réordonner.</p>
   {% endif %}
+</div>
+{% endmacro %}
+
+{% macro favourites_panel() %}
+<div id="favourites" class="favourites{{ ' hidden' if not favourites }}" {{ o }}>
+  <div class="section-title">
+    <span>❤️ Favoris</span>
+    <span class="muted small">{{ favourites|length|plural("chanson") if favourites }}</span>
+  </div>
+  <div class="list">
+    {% for f in favourites %}
+    {{ song.card(room.code, f.video_id, f.title, f.artist, f.thumbnail, f.cancelled, f.ready,
+                 f.video_id in added, True, id="fav-" ~ f.video_id) }}
+    {% endfor %}
+  </div>
 </div>
 {% endmacro %}
 

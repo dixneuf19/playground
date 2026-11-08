@@ -15,6 +15,12 @@ from typing import Any
 
 import asyncpg
 
+from karaoke.favourites import (
+    MAX_FAVOURITES,
+    MAX_SHOWN,
+    NON_FAVOURITE_SHARE,
+    Favourite,
+)
 from karaoke.messages import MAX_NAME
 from karaoke.photos import (
     MAX_PENDING_PER_ROOM,
@@ -110,6 +116,17 @@ MIGRATIONS: list[str] = [
         last_seen timestamptz NOT NULL,
         PRIMARY KEY (room_code, token),
         UNIQUE (room_code, name)
+    );
+    """,
+    # 5: favourites, shared by every room (not tied to a video row: the
+    # video may be evicted or never downloaded).
+    """
+    CREATE TABLE IF NOT EXISTS favourites (
+        video_id   text PRIMARY KEY,
+        title      text NOT NULL DEFAULT '',
+        artist     text NOT NULL DEFAULT '',
+        thumbnail  text NOT NULL DEFAULT '',
+        created_at timestamptz NOT NULL DEFAULT now()
     );
     """,
 ]
@@ -586,6 +603,58 @@ class Store:
         )
         return [r["code"] for r in rows]
 
+    # --- favourites ---------------------------------------------------------
+
+    async def set_favourite(
+        self, video_id: str, on: bool, title: str = "", artist: str = ""
+    ) -> bool:
+        """Heart or unheart a song for every room. False when the list is
+        full; hearting a song twice keeps its first title. Every replica
+        pushes the new list to its phones. The cap is a soft one: concurrent
+        hearts may each see room for one more and go a little past it."""
+        async with self.pool.acquire() as conn, conn.transaction():
+            if on:
+                status = await conn.execute(
+                    """INSERT INTO favourites (video_id, title, artist, thumbnail)
+                       SELECT $1, $2, $3, $4
+                       WHERE (SELECT count(*) FROM favourites) < $5
+                       ON CONFLICT (video_id) DO NOTHING""",
+                    video_id,
+                    title,
+                    artist,
+                    thumbnail_url(video_id),
+                    MAX_FAVOURITES,
+                )
+            else:
+                status = await conn.execute(
+                    "DELETE FROM favourites WHERE video_id = $1", video_id
+                )
+            if not status.endswith(" 0"):  # "INSERT 0 1", "DELETE 1"
+                await self._notify(conn, {"favourites": True})
+            hearted = await conn.fetchval(
+                "SELECT EXISTS (SELECT 1 FROM favourites WHERE video_id = $1)",
+                video_id,
+            )
+            return hearted == on
+
+    async def favourites(self, limit: int = MAX_SHOWN) -> list[Favourite]:
+        """Latest hearted first."""
+        rows = await self.pool.fetch(
+            """SELECT f.video_id, f.title, f.artist, f.thumbnail,
+                      coalesce(v.status = 'ready', false) AS ready
+               FROM favourites f LEFT JOIN videos v USING (video_id)
+               ORDER BY f.created_at DESC, f.video_id LIMIT $1""",
+            limit,
+        )
+        return [Favourite(**dict(r)) for r in rows]
+
+    async def hearted(self, video_ids: list[str]) -> set[str]:
+        """Which of these videos are favourites."""
+        rows = await self.pool.fetch(
+            "SELECT video_id FROM favourites WHERE video_id = ANY($1)", video_ids
+        )
+        return {r["video_id"] for r in rows}
+
     # --- videos -------------------------------------------------------------
 
     async def video_status(
@@ -704,21 +773,27 @@ class Store:
 
     async def evict(self, max_bytes: int) -> list[str]:
         """Forget the least recently played videos beyond the budget; the caller
-        deletes the files. Videos still in a queue are kept."""
+        deletes the files. Videos still in a queue are kept. Other videos go
+        once the cache is past a share of the budget, favourites only past
+        all of it: the rest of the budget is theirs."""
+        others_bytes = int(max_bytes * NON_FAVOURITE_SHARE)
         async with self.pool.acquire() as conn, conn.transaction():
             rows = await conn.fetch(
-                """SELECT video_id, size FROM videos v WHERE status = 'ready'
+                """SELECT video_id, size,
+                          EXISTS (SELECT 1 FROM favourites f
+                                  WHERE f.video_id = v.video_id) AS favourite
+                   FROM videos v WHERE status = 'ready'
                    AND NOT EXISTS (SELECT 1 FROM queue_items q
                                    WHERE q.video_id = v.video_id)
-                   ORDER BY last_used"""
+                   ORDER BY favourite, last_used"""
             )
             total = await conn.fetchval(
                 "SELECT coalesce(sum(size), 0) FROM videos WHERE status = 'ready'"
             )
             evicted = []
             for r in rows:
-                if total <= max_bytes:
-                    break
+                if total <= (max_bytes if r["favourite"] else others_bytes):
+                    continue
                 evicted.append(r["video_id"])
                 total -= r["size"]
             # Check again while deleting: a song may have been queued meanwhile.

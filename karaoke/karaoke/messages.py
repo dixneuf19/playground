@@ -81,6 +81,15 @@ class Retry(Message):
     item_id: str
 
 
+class Heart(Message):
+    """Add a song to the shared favourites (`on`), or take it out. Its title
+    and artist come from YouTube, not from the phone: every room shows them."""
+
+    type: Literal["heart"]
+    video_id: VideoId
+    on: bool
+
+
 class PhotoSkip(Message):
     type: Literal["photo_skip"]
 
@@ -132,6 +141,7 @@ AnyMessage = Annotated[
     | Restart
     | Volume
     | Retry
+    | Heart
     | PhotoSkip
     | PhotoRemove
     | React

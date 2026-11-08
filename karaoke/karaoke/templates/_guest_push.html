@@ -4,6 +4,7 @@
 {{ state.player() }}
 {{ state.queue_badge() }}
 {{ state.queue_panel() }}
+{% if favourites is not none %}{{ state.favourites_panel() }}{% endif %}
 {{ state.photo_badge() }}
 {{ state.onscreen() }}
 {{ state.my_photos_panel() }}

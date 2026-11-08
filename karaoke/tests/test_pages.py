@@ -172,6 +172,85 @@ def test_pushed_fragments_are_personal_and_escaped(client: TestClient) -> None:
     assert "tag-me" not in tom.get(f"/r/{code}/state").text
 
 
+def _youtube(client: TestClient) -> None:
+    """Fake searches: a link lookup knows every id but "zzzzzzzzzzz"."""
+
+    async def fake(_q: str, _everywhere: bool, link: str | None) -> list:
+        if link == "zzzzzzzzzzz":
+            return []
+        return [
+            SearchResult(
+                video_id=link or VID,
+                title="Song",
+                artist="Singer",
+                raw_title="Song - Singer",
+                channel="KaraFun",
+                duration=None,
+                thumbnail="t",
+                curated=not link,
+            )
+        ]
+
+    setattr(services(client).searcher, "_search", fake)  # noqa: B010
+
+
+def test_favourites_are_shared_by_every_room(client: TestClient) -> None:
+    _youtube(client)
+    first, second = _room(client), _room(client)
+    claim(client, second, "Tom")
+    lea = claim(phone(client), first, "Léa")
+    page = client.get(f"/r/{second}").text
+    assert 'class="favourites hidden"' in page  # nothing hearted yet
+    with client.websocket_connect(f"/ws/{second}?view=html") as tom:
+        tom.receive_text()
+        # Léa hearts a song in the first room; the title comes from YouTube
+        res = lea.post(
+            f"/r/{first}/heart",
+            data={"type": "heart", "video_id": VID, "title": "Forged", "on": "true"},
+        )
+        assert res.status_code == 200
+        assert 'aria-pressed="true"' in res.text  # the button, now on
+        assert "Retirer des favoris ?" in res.text  # removing asks first
+        # Tom's phone, in the other room, gets the list by push
+        pushed = tom.receive_text()
+        assert f'id="fav-{VID}"' in pushed and "Singer" in pushed
+        assert "Forged" not in pushed
+        # A plain room push leaves the (heavy) list out
+        client.post(f"/r/{second}/do", data={"type": "add", "video_id": VID})
+        pushed = tom.receive_text()
+    assert 'id="queue-panel"' in pushed and 'id="favourites"' not in pushed
+    # Anyone may take it out
+    res = client.post(
+        f"/r/{second}/heart", data={"type": "heart", "video_id": VID, "on": "false"}
+    )
+    assert 'aria-pressed="false"' in res.text
+    assert f'id="fav-{VID}"' not in client.get(f"/r/{first}").text
+    unknown = {"type": "heart", "video_id": "zzzzzzzzzzz", "on": "true"}
+    res = client.post(f"/r/{first}/heart", data=unknown)
+    assert res.status_code == 409 and "introuvable" in res.text
+    bad = {"type": "heart", "video_id": "../x", "on": "true"}
+    assert client.post(f"/r/{first}/heart", data=bad).status_code == 422
+    skip = {"type": "skip"}
+    assert client.post(f"/r/{first}/heart", data=skip).status_code == 422
+    assert client.post("/r/ZZZZ/heart", data=bad).status_code == 404
+
+
+def test_queued_songs_and_results_show_their_heart(client: TestClient) -> None:
+    _youtube(client)
+    code = _room(client)
+    claim(client, code, "Léa")
+    client.post(f"/r/{code}/do", data={"type": "add", "video_id": VID})
+    client.post(f"/r/{code}/do", data={"type": "add", "video_id": "kkkkkkkkkkk"})
+    client.post(f"/r/{code}/do", data={"type": "heart", "video_id": VID, "on": 1})
+    state = client.get(f"/r/{code}/state").text
+    assert state.count('aria-pressed="true"') == 1  # the hearted queued song
+    assert state.count('aria-pressed="false"') == 1  # the other one
+    assert f'id="fav-{VID}"' in client.get(f"/r/{code}").text
+
+    html = client.get(f"/r/{code}/search", params={"q": "song"}).text
+    assert 'aria-pressed="true"' in html
+
+
 def test_only_the_uploader_sees_their_waiting_photos(client: TestClient) -> None:
     code = _room(client)
     url = f"/api/rooms/{code}/photos"
@@ -265,6 +344,12 @@ def test_the_queue_tab_holds_the_player(client: TestClient) -> None:
     for control in ("Recommencer", "Pause", "Suivante", 'id="volume"'):
         assert control in player
     assert "se prépare" not in player
+    assert 'class="heart"' in player  # the playing song can be hearted
+    _youtube(client)
+    client.post(f"/r/{code}/heart", data={"type": "heart", "video_id": VID, "on": 1})
+    state = client.get(f"/r/{code}/state").text
+    player = state[state.index('id="player"') : state.index('id="queue-panel"')]
+    assert 'aria-pressed="true"' in player
     # The search tab's mini card is a button leading to it
     tag, classes = _tag(page, "now-mini")
     assert tag.startswith("<button") and 'data-view="queue"' in tag
@@ -296,6 +381,7 @@ def test_search_intro_shows_popular_songs(client: TestClient) -> None:
         assert "Les lacs du Connemara" in html
         assert "🎤 1 fois" in html
         assert "Prêt" in html
+        assert 'aria-label="Ajouter aux favoris"' in html  # the shared card
         assert 'data-confirm-yes="J\'assume"' in html  # cancelled: asks first
         assert "✓" in html  # Léa is singing it
 

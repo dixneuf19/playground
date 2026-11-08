@@ -31,13 +31,14 @@ async def start(cfg: Settings) -> Services:
     photos = PhotoFiles(cfg.data_dir)
     worker = Worker(cfg, store, library, photos)
     hub = Hub(cfg.dsn(), store, render_guest_state, on_downloads=worker.wake)
+    searcher = Searcher(cfg.channels)
     svc = Services(
         cfg=cfg,
         store=store,
         library=library,
         photos=photos,
-        searcher=Searcher(cfg.channels),
-        actions=Actions(store, library, photos),
+        searcher=searcher,
+        actions=Actions(store, library, photos, searcher),
         hub=hub,
         worker=worker,
     )

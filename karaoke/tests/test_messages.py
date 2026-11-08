@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from karaoke.messages import Add, Ended, Move, React, Volume, parse
+from karaoke.messages import Add, Ended, Heart, Move, React, Volume, parse
 
 
 def test_add_trims_free_text_and_ignores_extra_fields() -> None:
@@ -62,6 +62,9 @@ def test_form_strings_are_coerced() -> None:
         type="move", item_id="x", index=3
     )
     assert parse({"type": "volume", "value": "0.4"}) == Volume(type="volume", value=0.4)
+    # htmx sends JSON booleans of hx-vals as strings
+    heart = parse({"type": "heart", "video_id": "abcdefghijk", "on": "false"})
+    assert heart == Heart(type="heart", video_id="abcdefghijk", on=False)
 
 
 @pytest.mark.parametrize(
@@ -69,6 +72,8 @@ def test_form_strings_are_coerced() -> None:
     [
         {"type": "nope"},
         {"type": "remove"},  # no item
+        {"type": "heart", "video_id": "../../x", "on": True},
+        {"type": "heart", "video_id": "abcdefghijk"},  # on or off?
         {"type": "volume", "value": float("nan")},
         {"type": "position", "item_id": "x", "t": float("inf")},
         {"type": "player", "state": "idle"},

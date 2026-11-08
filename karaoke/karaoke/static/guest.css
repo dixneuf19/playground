@@ -47,6 +47,13 @@ main { padding: 16px; max-width: 640px; margin: 0 auto; }
 }
 .add:active { transform: scale(0.88); }
 .add.done { background: var(--green); box-shadow: none; font-size: 1.1rem; }
+.heart { width: 36px; height: 36px; border-radius: 50%; flex: none; display: grid; place-items: center; font-size: 1.15rem; line-height: 1; opacity: 0.55; transition: transform 0.15s; }
+.heart.on { opacity: 1; }
+.heart:active { transform: scale(0.85); }
+
+/* favourites: only on the search tab before searching */
+.favourites { margin-bottom: 8px; }
+#view-search:not(:has(.intro-search)) .favourites { display: none; }
 
 .placeholder { text-align: center; padding: 48px 16px; color: var(--muted); }
 .placeholder .big { font-size: 2.6rem; margin-bottom: 8px; }
@@ -69,7 +76,8 @@ main { padding: 16px; max-width: 640px; margin: 0 auto; }
 .qi img { width: 72px; aspect-ratio: 16/9; object-fit: cover; border-radius: 8px; flex: none; }
 .qi .meta { min-width: 0; flex: 1; }
 .qi .t { font-weight: 600; }
-.qi .sub { font-size: 0.85rem; color: var(--muted); display: flex; gap: 6px; align-items: center; margin-top: 2px; }
+.qi .sub { font-size: 0.85rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; margin-top: 2px; }
+.qi .heart { width: 32px; margin-right: -6px; }
 .qi .x { width: 36px; height: 36px; border-radius: 50%; color: var(--muted); font-size: 1.2rem; flex: none; }
 .qi .x:active { background: var(--surface-2); }
 .bar { height: 3px; background: var(--surface-2); border-radius: 2px; margin-top: 6px; overflow: hidden; }

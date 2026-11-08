@@ -7,7 +7,7 @@ import re
 import time
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any
 from urllib.parse import quote
 
@@ -205,6 +205,23 @@ class Searcher:
             self._warming.add(task)
             task.add_done_callback(self._warming.discard)
         return SearchPage(q, everywhere, results, strong)
+
+    async def describe(self, video_id: str) -> SearchResult | None:
+        """What YouTube says a video is: from a recent search when one
+        showed it (titles already parsed), otherwise looked up by id."""
+        now = time.monotonic()
+        for expires, results in self._cache.values():
+            for r in results:
+                if r.video_id == video_id and expires > now:
+                    return r
+        found = await self._search(video_id, False, video_id)
+        if not found:
+            return None
+        r = found[0]
+        if "karafun" in normalize(r.channel):  # a link lookup is not parsed
+            title, artist = split_title(r.raw_title)
+            r = replace(r, title=title, artist=artist)
+        return r
 
     async def _search(
         self, q: str, everywhere: bool, link: str | None

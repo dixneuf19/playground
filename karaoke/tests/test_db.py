@@ -48,15 +48,64 @@ def test_download_runs_once_and_restarts_after_a_leader_change(
     _run(make_settings, test)
 
 
+async def _cache(store: Store, *video_ids: str) -> None:
+    """Downloaded, oldest first, 100 bytes each."""
+    for vid in video_ids:
+        await store.video_status(vid)
+        await store.start_download(vid)
+        await store.finish_download(vid, ok=True, size=100)
+
+
 def test_eviction_keeps_queued_videos(make_settings: Callable[..., Settings]) -> None:
     async def test(store: Store) -> None:
-        for vid in (VID, "kkkkkkkkkkk"):
-            await store.video_status(vid)
-            await store.start_download(vid)
-            await store.finish_download(vid, ok=True, size=100)
+        await _cache(store, VID, "kkkkkkkkkkk")
         await _queue(store, VID)
         assert await store.evict(max_bytes=0) == ["kkkkkkkkkkk"]
         assert await store.cached([VID]) == {VID}
+
+    _run(make_settings, test)
+
+
+def test_favourites_keep_the_last_fifth_of_the_cache(
+    make_settings: Callable[..., Settings],
+) -> None:
+    async def test(store: Store) -> None:
+        fav, old, new = "fffffffffff", "ooooooooooo", "nnnnnnnnnnn"
+        await _cache(store, fav, old, new)  # 300 bytes, the favourite is oldest
+        assert await store.set_favourite(fav, on=True, title="Fav")
+        # Other videos go past 80% of the budget (200), even more recent ones
+        assert await store.evict(max_bytes=250) == [old]
+        # The favourite stays while the cache (200) fits the whole budget
+        assert await store.evict(max_bytes=200) == [new]
+        assert await store.cached([fav]) == {fav}
+        # It goes once the cache is past the whole budget
+        assert await store.evict(max_bytes=50) == [fav]
+
+    _run(make_settings, test)
+
+
+def test_favourites_are_shared_and_capped(
+    make_settings: Callable[..., Settings], monkeypatch
+) -> None:
+    monkeypatch.setattr("karaoke.db.MAX_FAVOURITES", 2)
+
+    async def test(store: Store) -> None:
+        await _cache(store, VID)
+        assert await store.set_favourite(VID, on=True, title="A", artist="X")
+        assert await store.set_favourite(VID, on=True, title="Other title")
+        assert await store.set_favourite("kkkkkkkkkkk", on=True, title="B")
+        assert not await store.set_favourite("zzzzzzzzzzz", on=True)  # full
+        favs = await store.favourites()
+        assert [(f.video_id, f.title, f.ready) for f in favs] == [
+            ("kkkkkkkkkkk", "B", False),  # latest first
+            (VID, "A", True),  # first title kept; cached
+        ]
+        assert favs[1].thumbnail.endswith(f"/{VID}/mqdefault.jpg")
+        assert [f.video_id for f in await store.favourites(limit=1)] == ["kkkkkkkkkkk"]
+        assert await store.hearted([VID, "zzzzzzzzzzz"]) == {VID}
+        assert await store.set_favourite(VID, on=False)
+        assert await store.set_favourite(VID, on=False)  # already gone: fine
+        assert [f.video_id for f in await store.favourites()] == ["kkkkkkkkkkk"]
 
     _run(make_settings, test)
 
