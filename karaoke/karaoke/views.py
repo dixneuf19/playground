@@ -12,6 +12,7 @@ from typing import Any, cast
 from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from karaoke.cancelled import split_artist
 from karaoke.favourites import Favourite
 from karaoke.reactions import EFFECTS, EMOJI
 from karaoke.rooms import Room
@@ -43,9 +44,14 @@ def duration(seconds: int | None) -> str:
     return f"{seconds // 60}:{seconds % 60:02d}" if seconds else ""
 
 
+def main_artist(artist: str) -> str:
+    """The first artist of a credit, to prefill the cancel sheet with."""
+    return next(iter(split_artist(artist)), "")
+
+
 # Jinja types its globals and filters too narrowly for plain functions.
 cast(Any, env.globals).update(static=static_url, reactions=EMOJI, effects=EFFECTS)
-cast(Any, env.filters).update(plural=plural, duration=duration)
+cast(Any, env.filters).update(plural=plural, duration=duration, main_artist=main_artist)
 
 
 def queued_by(room: Room, me: str) -> set[str]:

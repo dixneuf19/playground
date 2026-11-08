@@ -99,6 +99,31 @@
     </div>
   </div>
 
+  {# Opened by tapping a song (guest.js): cancel its artist, or uncancel it. #}
+  <div class="sheet hidden" id="artist-sheet">
+    <form class="card" id="cancel-form" hx-post="/r/{{ room.code }}/do" hx-swap="none">
+      <input type="hidden" name="type" value="cancel_artist">
+      <h2>🚫 Cancel un artiste</h2>
+      <p class="muted">Ses chansons restent jouables, mais tout le monde sera prévenu.</p>
+      <input class="field" name="artist" id="cancel-artist" maxlength="80" placeholder="Artiste" required>
+      <input class="field" name="reason" id="cancel-reason" maxlength="140" placeholder="Pourquoi ?" required>
+      <div class="actions">
+        <button class="btn btn-ghost" type="button" data-close>Annuler</button>
+        <button class="btn btn-primary" type="submit">Cancel</button>
+      </div>
+    </form>
+    <form class="card" id="uncancel-form" hx-post="/r/{{ room.code }}/do" hx-swap="none">
+      <input type="hidden" name="type" value="uncancel_artist">
+      <input type="hidden" name="artist" id="uncancel-artist">
+      <h2 id="uncancel-title"></h2>
+      <p class="muted" id="uncancel-text"></p>
+      <div class="actions">
+        <button class="btn btn-ghost" type="button" data-close>Fermer</button>
+        <button class="btn btn-primary" type="submit">Dé-cancel</button>
+      </div>
+    </form>
+  </div>
+
   <div class="toast" id="toast"></div>
 
 {# Pinned versions; the integrity hash makes the browser refuse any other file. #}

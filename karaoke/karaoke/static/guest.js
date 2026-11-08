@@ -83,10 +83,10 @@ function confirmSheet(title, text, yes = "Oui") {
     $("confirm-no").onclick = () => done(false);
   });
 }
-// Adding a song needs a name: it shows on the big screen. Checked before the
-// confirmation sheet, which would be pointless without one.
+// Adding a song (shown on the big screen) or cancelling an artist (signed)
+// needs a name. Checked before the confirmation sheet, pointless without one.
 document.addEventListener("htmx:config:request", (e) => {
-  if (e.detail.ctx.sourceElement.matches("[data-added]") && !myName()) {
+  if (e.detail.ctx.sourceElement.matches("[data-added], #cancel-form") && !myName()) {
     e.preventDefault();
     askName();
   }
@@ -124,6 +124,39 @@ $("q").addEventListener("input", () => {
   if (!$("q").value.trim()) { $("everywhere").value = "0"; $("search-form").requestSubmit(); }
 });
 $("search-form").addEventListener("submit", () => $("q").blur());
+
+// --- cancelled artists ------------------------------------------------------
+// Tapping a song opens the artist sheet: cancel the artist with a reason, or
+// see why it is cancelled and uncancel it. The server sends the details.
+function closeArtist() { $("artist-sheet").classList.add("hidden"); }
+document.addEventListener("click", (e) => {
+  if (e.target.closest("[data-close]")) { closeArtist(); return; }
+  const el = e.target.closest("[data-artist]");
+  // Buttons inside the song (Réessayer…) do their own thing
+  if (!el || e.target.closest("button, a, [hx-post]")) return;
+  const { artist, cancel } = JSON.parse(el.dataset.artist);
+  $("cancel-form").classList.toggle("hidden", !!cancel);
+  $("uncancel-form").classList.toggle("hidden", !cancel);
+  if (cancel) {
+    $("uncancel-artist").value = cancel.artist;
+    $("uncancel-title").textContent = `🚫 ${cancel.artist} est cancel`;
+    const by = cancel.by ? `Cancel par ${cancel.by}` : "Cancel";
+    const when = `${by} le ${cancel.date}`; // "8 nov." already ends a sentence
+    $("uncancel-text").textContent = `« ${cancel.reason} » ${when}${when.endsWith(".") ? "" : "."}`;
+  } else {
+    $("cancel-artist").value = artist;
+    $("cancel-reason").value = "";
+  }
+  $("artist-sheet").classList.remove("hidden");
+  if (!cancel) setTimeout(() => $(artist ? "cancel-reason" : "cancel-artist").focus(), 50);
+});
+// Done (`HX-Trigger: {"cancelled": true}`): the queue comes back by push, the
+// results (or, before a search, the popular list) are fetched again for
+// their flags.
+document.body.addEventListener("cancelled", () => {
+  closeArtist();
+  $("search-form").requestSubmit();
+});
 
 // --- live connection ---------------------------------------------------------
 // hx-ws reconnects by itself (closes 1001/1005/1006/1011-1014), and pauses

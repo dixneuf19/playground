@@ -154,11 +154,11 @@ def test_position_of_counts_the_current_song() -> None:
     assert room.position_of("bbbbbbbbbbb", "Léa") is None
 
 
-def test_new_item_builds_its_thumbnail_and_flags() -> None:
+def test_new_item_builds_its_thumbnail() -> None:
     item = QueueItem.new("abcdefghijk", "Les lacs du Connemara", "Michel Sardou", "")
     assert item.thumbnail == "https://i.ytimg.com/vi/abcdefghijk/mqdefault.jpg"
     assert item.singer == "Anonyme"
-    assert item.cancelled
+    assert item.cancelled is None  # flagged by the store on load
 
 
 def test_a_renamed_guest_takes_their_songs_and_photos() -> None:

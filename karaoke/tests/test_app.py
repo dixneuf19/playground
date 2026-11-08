@@ -107,6 +107,43 @@ def test_cancelled_flag_is_set_by_server(client: TestClient) -> None:
         assert item["cancelled"].startswith("Michel Sardou")
 
 
+def test_cancelling_flags_queued_songs_in_every_room(client: TestClient) -> None:
+    here, there = _room(client), _room(client)
+    claim(client, here, "Léa")
+    with (
+        client.websocket_connect(f"/ws/{here}") as guest,
+        client.websocket_connect(f"/ws/{there}") as other,
+    ):
+        guest.receive_json()
+        other.receive_json()
+        other.send_json(
+            {
+                "type": "add",
+                "video_id": "xxxxxxxxxxx",
+                "title": "Rien",
+                "artist": "Indochine",
+            }
+        )
+        item = _state(other, lambda r: r["queue"])["queue"][0]
+        assert item["cancelled"] is None
+
+        # Refused (no reason): ignored, the socket stays open
+        guest.send_json({"type": "cancel_artist", "artist": "Indochine"})
+        guest.send_json(
+            {
+                "type": "cancel_artist",
+                "artist": "indochine",
+                "reason": "Trop triste",
+                "by": "Tom",  # forged: the name the phone holds signs it
+            }
+        )
+        item = _state(other, lambda r: r["queue"][0]["cancelled"])["queue"][0]
+        assert item["cancelled"] == "indochine : Trop triste (cancel par Léa)."
+
+        guest.send_json({"type": "uncancel_artist", "artist": "Indochine"})
+        _state(other, lambda r: r["queue"][0]["cancelled"] is None)
+
+
 def test_queue_survives_a_restart(make_settings: Callable[..., Settings]) -> None:
     cfg = make_settings()
     with TestClient(create_app(cfg)) as first:

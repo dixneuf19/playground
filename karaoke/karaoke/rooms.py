@@ -12,7 +12,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from karaoke.cancelled import cancel_reason
+from karaoke.cancelled import Cancellation
 from karaoke.photos import Photo, PhotoQueue
 
 # No 0/O, 1/I/L: codes get typed from a TV across a dark room.
@@ -45,8 +45,9 @@ class QueueItem:
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:10])
     status: ItemStatus = "pending"
     progress: float = 0.0
-    # Set server-side from karaoke.cancelled, never trusted from the phone.
-    cancelled: str | None = None
+    # Set by the store on every load from the cancelled artists table, never
+    # trusted from the phone: an artist cancelled later flags queued songs too.
+    cancelled: Cancellation | None = None
 
     @classmethod
     def new(
@@ -66,7 +67,6 @@ class QueueItem:
             singer=singer or "Anonyme",
             thumbnail=thumbnail_url(video_id),
             status=status,
-            cancelled=cancel_reason(artist, title),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -79,7 +79,7 @@ class QueueItem:
             "thumbnail": self.thumbnail,
             "status": self.status,
             "progress": round(self.progress, 2),
-            "cancelled": self.cancelled,
+            "cancelled": self.cancelled.label() if self.cancelled else None,
         }
 
 

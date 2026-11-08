@@ -25,23 +25,26 @@
   hx-post="/r/{{ code }}/do" hx-swap="none"
   hx-vals='{{ {"type": "add", "video_id": video_id, "title": title, "artist": artist}|tojson }}'
   {% if cancelled %}
-  hx-confirm="{{ cancelled }} Tu assumes de la chanter devant tout le monde ?"
+  hx-confirm="{{ cancelled.label() }} Tu assumes de la chanter devant tout le monde ?"
   data-confirm-title="🚫 Artiste cancel" data-confirm-yes="J'assume"
   {% endif %}
   data-added>{{ "✓" if done else "+" }}</button>
 {%- endmacro %}
 
 {#
-  cancelled: the reason, or None. ready: in the video cache. done: this guest
-  has it queued. hearted: a favourite. id: the card's element id, if any.
+  cancelled: the Cancellation, or None. ready: in the video cache. done: this
+  guest has it queued. hearted: a favourite. id: the card's element id, if any.
+  artist: the parsed one, "" for YouTube results, which show their `channel`
+  instead (never queued or matched as the artist). Tapping the song opens the
+  artist sheet (guest.js).
 #}
 {% macro card(code, video_id, title, artist, thumbnail, cancelled, ready, done, hearted,
-              curated=True, duration=None, plays=0, id=None) %}
+              curated=True, duration=None, plays=0, id=None, channel="") %}
 <div class="card song"{% if id %} id="{{ id }}"{% endif %}>
   <img src="{{ thumbnail }}" alt="" loading="lazy">
-  <div class="meta">
+  <div class="meta" data-artist='{{ {"artist": artist|main_artist, "cancel": cancelled.details() if cancelled else none}|tojson }}'>
     <div class="t">{{ title }}</div>
-    <div class="a ellipsis">{{ artist }}</div>
+    <div class="a ellipsis">{{ artist or channel }}</div>
     <div class="tags">
       {% if cancelled %}<span class="tag tag-cancel">🚫 Cancel</span>{% endif %}
       {% if not curated %}<span class="tag tag-yt">YouTube</span>{% endif %}

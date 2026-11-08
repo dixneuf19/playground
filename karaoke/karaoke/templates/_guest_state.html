@@ -83,7 +83,7 @@ hx-post="{{ do }}" hx-vals='{{ vals|tojson }}' hx-swap="none"
       <span class="handle">⠿</span>
       <span class="pos">{{ loop.index }}</span>
       <img src="{{ i.thumbnail }}" alt="">
-      <div class="meta">
+      <div class="meta" data-artist='{{ {"artist": i.artist|main_artist, "cancel": i.cancelled.details() if i.cancelled else none}|tojson }}'>
         <div class="t ellipsis">{{ i.title }}</div>
         <div class="sub">
           <span class="ellipsis">{{ i.singer }}</span>

@@ -8,7 +8,7 @@ replaces it with YouTube's (worker.check_favourites).
 
 from dataclasses import dataclass
 
-from karaoke.cancelled import cancel_reason
+from karaoke.cancelled import Cancellation
 
 MAX_FAVOURITES = 500  # stored; public site, so bounded
 # Share of KARAOKE_CACHE_MAX_GB past which other videos are evicted;
@@ -27,7 +27,5 @@ class Favourite:
     thumbnail: str
     ready: bool = False  # in the video cache right now
     plays: int = 0  # rooms that sang it lately, as in the popular list
-
-    @property
-    def cancelled(self) -> str | None:
-        return cancel_reason(self.artist, self.title)
+    # Set by the store from the cancelled artists table, like queued songs.
+    cancelled: Cancellation | None = None

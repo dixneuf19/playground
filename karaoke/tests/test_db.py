@@ -3,6 +3,7 @@
 import asyncio
 from collections.abc import Callable
 
+from karaoke.cancelled import Cancellation
 from karaoke.config import Settings
 from karaoke.db import MIGRATIONS, Store
 from karaoke.rooms import QueueItem
@@ -245,5 +246,56 @@ def test_popular_songs_count_rooms_with_the_youtube_title(
         assert [p.video_id for p in await store.popular()] == ["ccccccccccc"]
         await store.prune_plays()
         assert await store.pool.fetchval("SELECT count(*) FROM plays") == 1
+
+    _run(make_settings, test)
+
+
+def test_favourites_are_flagged_from_the_cancelled_artists(
+    make_settings: Callable[..., Settings],
+) -> None:
+    async def test(store: Store) -> None:
+        # YouTube favourites keep the channel as artist: the title still flags
+        await store.set_favourite(
+            VID, on=True, title="Michel Sardou - Les lacs du Connemara", artist="Chan"
+        )
+        await store.set_favourite("bbbbbbbbbbb", on=True, title="X", artist="Indochine")
+
+        async def flags() -> dict[str, str | None]:
+            return {
+                f.video_id: f.cancelled.label() if f.cancelled else None
+                for f in await store.favourites()
+            }
+
+        assert await flags() == {
+            VID: "Michel Sardou : Cancel par la maison.",
+            "bbbbbbbbbbb": None,
+        }
+        await store.cancel_artist(Cancellation("Indochine", "Trop triste", "Léa", 0))
+        assert (await flags())["bbbbbbbbbbb"] == (
+            "Indochine : Trop triste (cancel par Léa)."
+        )
+        await store.uncancel_artist("indochine")
+        assert (await flags())["bbbbbbbbbbb"] is None
+
+    _run(make_settings, test)
+
+
+def test_the_old_cancelled_column_is_still_written_for_the_previous_release(
+    make_settings: Callable[..., Settings],
+) -> None:
+    async def test(store: Store) -> None:
+        code = await store.create_room()
+        async with store.room_tx(code) as tx:
+            assert tx is not None
+            tx.room.add(
+                QueueItem.new(VID, "Les lacs du Connemara", "Michel Sardou", "s")
+            )
+        async with store.room_tx(code) as tx:  # loaded flagged, saved with it
+            assert tx is not None
+            tx.room.set_volume(0.5)
+        column = "SELECT cancelled FROM queue_items WHERE room_code = $1"
+        assert await store.pool.fetchval(column, code) == (
+            "Michel Sardou : Cancel par la maison."
+        )
 
     _run(make_settings, test)
