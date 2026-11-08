@@ -14,12 +14,6 @@
   ],
   "packageRules": [
     {
-      "description": "CDN bumps in karaoke templates need `make sri` pushed to the branch: never automerge",
-      "matchManagers": ["custom.regex"],
-      "matchFileNames": ["karaoke/karaoke/templates/**"],
-      "automerge": false
-    },
-    {
       "description": "htmx 4 is published under npm's next tag while latest stays on 2.x until 2027: keep proposing 4.x",
       "matchDatasources": ["npm"],
       "matchPackageNames": ["htmx.org"],
