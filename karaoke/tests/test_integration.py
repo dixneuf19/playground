@@ -4,17 +4,35 @@ from pathlib import Path
 
 import pytest
 
-from karaoke.config import Settings
 from karaoke.library import Library
-from karaoke.search import search_channels
+from karaoke.search import CHANNEL_HANDLES, search_channels
 
 
 @pytest.mark.integration
 def test_search_finds_french_catalogue() -> None:
-    results = search_channels("renaud manhattan kaboul", Settings().channels)
+    results = search_channels("renaud manhattan kaboul", CHANNEL_HANDLES)
     assert results
     assert results[0].title == "Manhattan-Kaboul"
     assert results[0].artist == "Renaud"
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("query", "channel", "song", "artist"),
+    [
+        ("desireless voyage voyage", "bdfabkaraoke9959", "Voyage voyage", "Desireless"),
+        ("toto africa", "singkingkaraoke", "Africa", "Toto"),
+    ],
+)
+def test_search_parses_each_channel(
+    query: str, channel: str, song: str, artist: str
+) -> None:
+    results = search_channels(query, [channel])
+    assert results
+    assert (results[0].title.lower(), results[0].artist.lower()) == (
+        song.lower(),
+        artist.lower(),
+    )
 
 
 @pytest.mark.integration

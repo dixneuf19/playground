@@ -4,11 +4,6 @@ from pathlib import Path
 from urllib.parse import quote
 
 
-def _channels() -> list[str]:
-    raw = os.environ.get("KARAOKE_CHANNELS", "karafunfr,karafun")
-    return [c.strip().lstrip("@") for c in raw.split(",") if c.strip()]
-
-
 @dataclass(frozen=True)
 class Settings:
     data_dir: Path = field(
@@ -22,8 +17,6 @@ class Settings:
     public_url: str = field(
         default_factory=lambda: os.environ.get("KARAOKE_PUBLIC_URL", "").rstrip("/")
     )
-    # Curated YouTube channels searched by default, in priority order.
-    channels: list[str] = field(default_factory=_channels)
     # The video cache never grows past this size (see db.Store.evict).
     cache_max_gb: float = field(
         default_factory=lambda: float(os.environ.get("KARAOKE_CACHE_MAX_GB", "50"))

@@ -6,6 +6,7 @@ import logging
 import re
 import time
 import unicodedata
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, replace
 from typing import Any
@@ -18,10 +19,54 @@ logger = logging.getLogger(__name__)
 CHANNEL_RESULTS = 20
 YOUTUBE_RESULTS = 12
 
-# "Song - Artist | Karaoke Version | KaraFun" (international channel)
-_INTL_SUFFIX = re.compile(r"\s*\|\s*karaoke version\s*\|\s*karafun\s*$", re.I)
-# "Karaoké Song - Artist *" (French channel)
-_FR_PREFIX = re.compile(r"^\s*karaok[eé]\s+", re.I)
+
+@dataclass(frozen=True)
+class Channel:
+    handle: str  # youtube.com/@<handle>
+    # Its title formats, with named song/artist groups.
+    formats: tuple[re.Pattern[str], ...]
+
+
+def _formats(*patterns: str) -> tuple[re.Pattern[str], ...]:
+    return tuple(re.compile(p, re.I) for p in patterns)
+
+
+# The curated channels, searched in parallel, in priority order: when several
+# have the same song, or two results score the same, the earlier channel wins.
+CHANNELS = (
+    Channel(
+        "karafunfr",
+        # "Karaoké Song - Artist *"
+        _formats(r"^\s*karaok[eé]\s+(?P<song>.+) - (?P<artist>[^|]+?)[\s*]*$"),
+    ),
+    Channel(
+        "karafun",
+        # "Song - Artist | Karaoke Version | KaraFun"
+        _formats(
+            r"^(?P<song>.+) - (?P<artist>.+?)\s*\|\s*karaoke version\s*\|\s*karafun$"
+        ),
+    ),
+    # French songs missing from KaraFun's YouTube catalogue.
+    Channel(
+        "bdfabkaraoke9959",
+        # "Artist - Song (chœurs) (2013) [BDFab karaoke]"
+        _formats(
+            r"^(?P<artist>.+?) - (?P<song>.+?)(?:\s*\(ch(?:œ|oe)urs\))?"
+            r"(?:\s*\(\d{4}\))?\s*\[bdfab karaoke\]$"
+        ),
+    ),
+    # English songs missing from KaraFun's YouTube catalogue.
+    Channel(
+        "singkingkaraoke",
+        _formats(
+            # "Artist - Song (Karaoke Version)", like most labels
+            r"^(?P<artist>.+?) - (?P<song>.+?)\s*\(karaoke version\)$",
+            # Variants, kept in the song: "Artist - Song (Piano Karaoke)"
+            r"^(?P<artist>.+?) - (?P<song>.+\([^()]*\bkaraoke\b[^()]*\))$",
+        ),
+    ),
+)
+CHANNEL_HANDLES = tuple(c.handle for c in CHANNELS)
 
 
 @dataclass
@@ -39,13 +84,30 @@ class SearchResult:
         return asdict(self)
 
 
+def parse_title(raw: str) -> tuple[str, str] | None:
+    """(song, artist) when the title is in a curated channel's format."""
+    for fmt in (f for c in CHANNELS for f in c.formats):
+        if m := fmt.match(raw.strip()):
+            return m["song"].strip(), m["artist"].strip()
+    return None
+
+
 def split_title(raw: str) -> tuple[str, str]:
-    """Turn a KaraFun video title into (song, artist); best effort otherwise."""
-    cleaned = _FR_PREFIX.sub("", _INTL_SUFFIX.sub("", raw)).rstrip(" *").strip()
+    """Turn a karaoke video title into (song, artist); best effort otherwise."""
+    if parsed := parse_title(raw):
+        return parsed
+    cleaned = raw.rstrip(" *").strip()
     if " - " in cleaned:
         song, artist = cleaned.rsplit(" - ", 1)
         return song.strip(), artist.strip()
     return cleaned, ""
+
+
+def is_karaoke(raw: str) -> bool:
+    """Curated channels also post compilations without lyrics, teasers, and
+    versions that keep the singer's voice ("Karaoke with Guide Vocal")."""
+    text = normalize(raw)
+    return "karaok" in text.replace(" ", "") and "guide vocal" not in text
 
 
 def normalize(text: str) -> str:
@@ -83,11 +145,14 @@ def video_id_from_url(text: str) -> str | None:
 
 
 def rank(query: str, results: list[SearchResult]) -> list[SearchResult]:
-    seen: set[str] = set()
+    """Best match first. A song several channels have keeps the video of the
+    first channel in `results` order (CHANNELS order)."""
+    seen: set[str | tuple[str, str]] = set()
     unique = []
     for r in results:
-        if r.video_id not in seen:
-            seen.add(r.video_id)
+        song = (normalize(r.title), normalize(r.artist))
+        if r.video_id not in seen and song not in seen:
+            seen.update((r.video_id, song))
             unique.append(r)
     return sorted(unique, key=lambda r: score(query, r), reverse=True)
 
@@ -124,7 +189,7 @@ def _extract(url: str, limit: int) -> list[dict[str, Any]]:
     return [e for e in (info or {}).get("entries") or [] if e]
 
 
-def search_channels(query: str, channels: list[str]) -> list[SearchResult]:
+def search_channels(query: str, channels: Sequence[str]) -> list[SearchResult]:
     def one(handle: str) -> list[SearchResult]:
         url = f"https://www.youtube.com/@{handle}/search?query={quote(query)}"
         try:
@@ -132,7 +197,11 @@ def search_channels(query: str, channels: list[str]) -> list[SearchResult]:
         except Exception:
             logger.exception("Search failed on @%s", handle)
             return []
-        return [r for e in entries if (r := _to_result(e, curated=True))]
+        return [
+            r
+            for e in entries
+            if (r := _to_result(e, curated=True)) and is_karaoke(r.raw_title)
+        ]
 
     with ThreadPoolExecutor(max(len(channels), 1)) as pool:
         batches = list(pool.map(one, channels))
@@ -186,7 +255,7 @@ class Searcher:
     """yt-dlp searches, a few at a time per replica and cached for a while:
     hammering YouTube from the home IP could get downloads blocked."""
 
-    def __init__(self, channels: list[str]) -> None:
+    def __init__(self, channels: Sequence[str] = CHANNEL_HANDLES) -> None:
         self.channels = channels
         self._slots = asyncio.Semaphore(MAX_CONCURRENT_SEARCHES)
         self._cache: dict[tuple[str, str], tuple[float, list[SearchResult]]] = {}
@@ -218,9 +287,8 @@ class Searcher:
         if not found:
             return None
         r = found[0]
-        if "karafun" in normalize(r.channel):  # a link lookup is not parsed
-            title, artist = split_title(r.raw_title)
-            r = replace(r, title=title, artist=artist)
+        if parsed := parse_title(r.raw_title):  # a link lookup is not parsed
+            r = replace(r, title=parsed[0], artist=parsed[1])
         return r
 
     async def _search(
