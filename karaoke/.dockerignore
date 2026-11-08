@@ -7,3 +7,4 @@ tests
 scripts
 *.md
 Makefile
+eslint.config.js
