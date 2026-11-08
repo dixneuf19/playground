@@ -10,6 +10,9 @@ from karaoke.cancelled import cancel_reason
 
 MAX_FAVOURITES = 500  # stored; public site, so bounded
 MAX_SHOWN = 50  # the latest ones, on the phone's search tab
+# Share of KARAOKE_CACHE_MAX_GB past which other videos are evicted;
+# favourites are evicted only past the whole of it.
+NON_FAVOURITE_SHARE = 0.8
 
 
 @dataclass(frozen=True)

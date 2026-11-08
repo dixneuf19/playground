@@ -28,8 +28,8 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   list). The search tab lists the latest 50 before a search, above the popular songs. 500 stored at
   most (a soft cap). Title and artist come from YouTube (`Searcher.describe`:
   a recent search, else a lookup of the id), never from the phone, since every
-  room shows them. Cache eviction keeps them until the higher
-  `KARAOKE_CACHE_HARD_MAX_GB`.
+  room shows them. Other videos are evicted from the cache past 80% of
+  `KARAOKE_CACHE_MAX_GB`, favourites only past all of it.
 - **The screen doesn't show who sent a photo** (a product choice, not a security
   property). A guest is known by the name their phone holds in the room: the
   phone page lists and cancels the pending photos uploaded under that name, and
@@ -171,8 +171,8 @@ Prod runs 2 replicas. Everything a replica knows lives in Postgres or on the sha
    cache only ever holds whole files, even if a demoted leader's yt-dlp thread
    finishes late. LRU eviction (`KARAOKE_CACHE_MAX_GB`, 20) never evicts a video
    still in a queue (re-checked in the `DELETE`, since followers add songs
-   concurrently), and evicts favourites last, only past
-   `KARAOKE_CACHE_HARD_MAX_GB` (30). The repair pass recreates video rows missing for queued songs,
+   concurrently). Other videos are evicted past 80% of the budget
+   (`favourites.NON_FAVOURITE_SHARE`), favourites only past all of it. The repair pass recreates video rows missing for queued songs,
    re-downloads lost files and starts a ready song in idle rooms.
 5. Position reports (`position`) are a plain `UPDATE` without lock or NOTIFY:
    they are frequent and nobody needs a push for them. They only apply while
@@ -260,7 +260,7 @@ uv run pytest -m integration -v   # real YouTube search + download (slow, networ
 
 Env: `KARAOKE_DATABASE_URL` or `KARAOKE_DB_USER/PASSWORD/HOST/PORT/NAME`,
 `KARAOKE_DATA_DIR`, `KARAOKE_PUBLIC_URL` (QR base URL), `KARAOKE_CHANNELS`,
-`KARAOKE_CACHE_MAX_GB`, `KARAOKE_CACHE_HARD_MAX_GB`, `KARAOKE_MAX_HEIGHT`, `KARAOKE_HOST_PASSWORD` (empty =
+`KARAOKE_CACHE_MAX_GB`, `KARAOKE_MAX_HEIGHT`, `KARAOKE_HOST_PASSWORD` (empty =
 anyone can create a room), `PORT`, `LOG_LEVEL`.
 
 ## Testing

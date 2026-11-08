@@ -15,7 +15,12 @@ from typing import Any
 
 import asyncpg
 
-from karaoke.favourites import MAX_FAVOURITES, MAX_SHOWN, Favourite
+from karaoke.favourites import (
+    MAX_FAVOURITES,
+    MAX_SHOWN,
+    NON_FAVOURITE_SHARE,
+    Favourite,
+)
 from karaoke.messages import MAX_NAME
 from karaoke.photos import (
     MAX_PENDING_PER_ROOM,
@@ -766,10 +771,12 @@ class Store:
         )
         return {r["video_id"] for r in rows}
 
-    async def evict(self, max_bytes: int, hard_max_bytes: int) -> list[str]:
+    async def evict(self, max_bytes: int) -> list[str]:
         """Forget the least recently played videos beyond the budget; the caller
-        deletes the files. Videos still in a queue are kept; favourites only
-        go once the cache is past the higher `hard_max_bytes`."""
+        deletes the files. Videos still in a queue are kept. Other videos go
+        once the cache is past a share of the budget, favourites only past
+        all of it: the rest of the budget is theirs."""
+        others_bytes = int(max_bytes * NON_FAVOURITE_SHARE)
         async with self.pool.acquire() as conn, conn.transaction():
             rows = await conn.fetch(
                 """SELECT video_id, size,
@@ -785,7 +792,7 @@ class Store:
             )
             evicted = []
             for r in rows:
-                if total <= (hard_max_bytes if r["favourite"] else max_bytes):
+                if total <= (max_bytes if r["favourite"] else others_bytes):
                     continue
                 evicted.append(r["video_id"])
                 total -= r["size"]

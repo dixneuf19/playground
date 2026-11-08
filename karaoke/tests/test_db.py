@@ -60,28 +60,26 @@ def test_eviction_keeps_queued_videos(make_settings: Callable[..., Settings]) ->
     async def test(store: Store) -> None:
         await _cache(store, VID, "kkkkkkkkkkk")
         await _queue(store, VID)
-        assert await store.evict(max_bytes=0, hard_max_bytes=0) == ["kkkkkkkkkkk"]
+        assert await store.evict(max_bytes=0) == ["kkkkkkkkkkk"]
         assert await store.cached([VID]) == {VID}
 
     _run(make_settings, test)
 
 
-def test_favourites_are_evicted_only_past_the_hard_limit(
+def test_favourites_keep_the_last_fifth_of_the_cache(
     make_settings: Callable[..., Settings],
 ) -> None:
     async def test(store: Store) -> None:
         fav, old, new = "fffffffffff", "ooooooooooo", "nnnnnnnnnnn"
         await _cache(store, fav, old, new)  # 300 bytes, the favourite is oldest
         assert await store.set_favourite(fav, on=True, title="Fav")
-        # Past the soft limit: other videos go first, even if more recent
-        evicted = await store.evict(max_bytes=150, hard_max_bytes=250)
-        assert sorted(evicted) == sorted([old, new])
+        # Other videos go past 80% of the budget (200), even more recent ones
+        assert await store.evict(max_bytes=250) == [old]
+        # The favourite stays while the cache (200) fits the whole budget
+        assert await store.evict(max_bytes=200) == [new]
         assert await store.cached([fav]) == {fav}
-        # Past the hard limit too: the favourite goes as well
-        await _cache(store, old, new)
-        assert sorted(await store.evict(max_bytes=0, hard_max_bytes=50)) == sorted(
-            [fav, old, new]
-        )
+        # It goes once the cache is past the whole budget
+        assert await store.evict(max_bytes=50) == [fav]
 
     _run(make_settings, test)
 

@@ -39,9 +39,6 @@ class Worker:
         self.photos = photos
         self.name = os.environ.get("HOSTNAME") or uuid.uuid4().hex[:8]
         self.max_cache_bytes = int(cfg.cache_max_gb * 1024**3)
-        self.hard_max_cache_bytes = max(
-            self.max_cache_bytes, int(cfg.cache_hard_max_gb * 1024**3)
-        )
         self.download_videos = True  # tests turn it off: no YouTube
         self.downloading: set[str] = set()  # by this replica, while it leads
         self._wake_downloads = asyncio.Event()
@@ -110,9 +107,7 @@ class Worker:
             ok, title, size = await self._run_download(video_id)
             await self.store.finish_download(video_id, ok, title, size)
             if ok:
-                for evicted in await self.store.evict(
-                    self.max_cache_bytes, self.hard_max_cache_bytes
-                ):
+                for evicted in await self.store.evict(self.max_cache_bytes):
                     self.library.delete(evicted)
                 for code in await self.store.rooms_with_video(video_id):
                     async with self.store.room_tx(code) as tx:
