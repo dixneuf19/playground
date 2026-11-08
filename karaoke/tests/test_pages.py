@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from karaoke import db
 from karaoke.app import create_app
 from karaoke.config import Settings
-from karaoke.reactions import ROOM_EMOJI_BURST
+from karaoke.reactions import BURST, ROOM_EMOJI_BURST
 from karaoke.search import SearchResult
 from tests.conftest import claim, freeze_reactions, phone, services
 
@@ -120,16 +120,13 @@ def test_reactions_from_the_phone_page(client: TestClient) -> None:
     assert res.status_code == 422
 
 
-def test_a_new_name_cookie_per_request_cannot_flood_the_room(
-    client: TestClient,
-) -> None:
-    freeze_reactions(client)
-    code = _room(client)
+def _fire_on_screen(client: TestClient, code: str, phones: list[TestClient]) -> int:
+    """Each phone claims a name and sends 10 🔥; how many reach the screen."""
     do = f"/r/{code}/do"
     with client.websocket_connect(f"/ws/{code}?role=display") as screen:
         screen.receive_json()
-        for n in range(20):  # a script rotating names: a fresh sender each time
-            claim(client, code, f"bot-{n}").post(
+        for n, p in enumerate(phones):
+            claim(p, code, f"bot-{n}").post(
                 do, data={"type": "react", "kind": "fire", "count": 10}
             )
         client.post(do, data={"type": "volume", "value": 0.5})  # NOTIFYs keep order
@@ -142,7 +139,20 @@ def test_a_new_name_cookie_per_request_cannot_flood_the_room(
                 break
             fire += msg["count"]
         assert msg["action"] == "volume"
-    assert fire == ROOM_EMOJI_BURST
+    return fire
+
+
+def test_renaming_gives_no_fresh_reaction_bucket(client: TestClient) -> None:
+    freeze_reactions(client)
+    code = _room(client)
+    assert _fire_on_screen(client, code, [client] * 20) == BURST  # one phone
+
+
+def test_rotating_phones_cannot_flood_the_room(client: TestClient) -> None:
+    freeze_reactions(client)
+    code = _room(client)
+    phones = [phone(client) for _ in range(20)]  # a fresh token each time
+    assert _fire_on_screen(client, code, phones) == ROOM_EMOJI_BURST
 
 
 def test_pushed_fragments_are_personal_and_escaped(client: TestClient) -> None:

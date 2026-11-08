@@ -201,8 +201,8 @@ async def ws(
         while True:
             try:
                 data = json.loads(await websocket.receive_text())
-                if isinstance(data, dict):  # reactions are throttled per socket
-                    data["sender"] = f"ws:{id(client)}"
+                if isinstance(data, dict):  # reactions are throttled per phone
+                    data["sender"] = client.token or f"ws:{id(client)}"
                 msg = parse(data)
             except (ValueError, ValidationError) as e:
                 logger.warning("Bad message in %s: %s", code, e)

@@ -182,6 +182,27 @@ def test_reactions_reach_screens_only_and_are_throttled_per_socket(
         assert guest.receive_json()["type"] == "state"
 
 
+def test_a_phone_s_sockets_share_one_reaction_bucket(client: TestClient) -> None:
+    freeze_reactions(client)
+    code = _room(client)
+    claim(client, code, "Léa")  # the phone now has a token
+    with (
+        client.websocket_connect(f"/ws/{code}?role=display") as screen,
+        client.websocket_connect(f"/ws/{code}") as tab_1,
+        client.websocket_connect(f"/ws/{code}") as tab_2,
+    ):
+        for ws in (screen, tab_1, tab_2):
+            ws.receive_json()
+        for ws in (tab_1, tab_2, tab_1, tab_2, tab_1, tab_2):
+            ws.send_json({"type": "react", "kind": "fire", "count": 10})
+        fire = 0
+        while fire < BURST:  # each tab alone would get BURST
+            fire += _until(screen, lambda m: m["type"] == "command")["count"]
+        tab_2.send_json({"type": "volume", "value": 0.5})
+        assert _until(screen, lambda m: m["type"] == "command")["action"] == "volume"
+    assert fire == BURST
+
+
 def test_names_are_shared_by_the_replicas(
     make_settings: Callable[..., Settings], monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -49,10 +49,11 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   pushed fragments): a fixed palette of 8 emoji that float up the TV, plus two
   effects (🎉 confetti, 💖 falling hearts). Ten emoji-only buttons in one grid,
   5 per row; the effects get a pink tint. Anonymous, like photos, but they need
-  a name (one throttle per name). Spamming is part of the fun: the phone groups
+  a name. Spamming is part of the fun: the phone groups
   quick taps (≤10 per message every 250 ms); per replica, the server throttles
-  each sender (token bucket, 8/s, burst 30, an effect costs 5) and each room
-  whoever sends (emoji 40/s burst 80, effects 2/s burst 4), so rotating names
+  each phone, keyed on its token so renaming gives no fresh bucket (token
+  bucket, 8/s, burst 30, an effect costs 5), and each room whoever sends
+  (emoji 40/s burst 80, effects 2/s burst 4), so rotating tokens or sockets
   can't flood the NOTIFYs; the screen caps live particles (80 emoji, 200 with
   effects).
 - **Resume after a screen reload**: the screen reports its position every 5 s; a
@@ -218,7 +219,7 @@ Invariants to keep:
   (`messages.py`) phone → server: `add`, `remove`, `move`, `skip`, `play`,
   `pause`, `restart`, `volume`, `retry`, `photo_skip`, `photo_remove`, `react`
   (`kind`, `count` 1-10; its `sender`, the throttle key, is set by the server:
-  the socket, or the name cookie on `/r/{code}/do`). Screen
+  the phone's token, or the socket when it has none). Screen
   only: `ended`, `player`, `position`. Server → JSON clients: `state` (full
   snapshot) and `command` (screens only; `react` carries `emoji` + `count` or
   `effect`); → `view=html`: HTML fragments. Close

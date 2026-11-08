@@ -97,7 +97,8 @@ class React(Message):
     type: Literal["react"]
     kind: Kind
     count: Annotated[int, Field(ge=1, le=MAX_BATCH)] = 1
-    # Set by the server (the socket, or the phone page's name): the throttle key.
+    # Set by the server: the throttle key, the phone's token (the socket for a
+    # page without one), never a name.
     sender: Name = ""
 
 

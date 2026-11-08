@@ -171,7 +171,8 @@ async def act(code: str, request: Request, svc: Svc, me: GuestName) -> Response:
     """Every button of the phone page. The new state comes back by push."""
     code = await room_or_404(svc, code)
     data: dict[str, Any] = dict(await request.form())
-    data["sender"] = me  # the reaction throttle key
+    # The reaction throttle key: the phone, so renaming gives no fresh bucket.
+    data["sender"] = guest_token(request)
     try:
         msg = from_guest(parse(data), me)
     except ValidationError as e:
