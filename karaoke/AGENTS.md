@@ -171,7 +171,7 @@ Prod runs 2 replicas. Everything a replica knows lives in Postgres or on the sha
    `pending → downloading → ready|error`. A download writes into
    `songs/.tmp/<worker>-<id>/` and is renamed into `songs/` when complete, so the
    cache only ever holds whole files, even if a demoted leader's yt-dlp thread
-   finishes late. LRU eviction (`KARAOKE_CACHE_MAX_GB`, 20) never evicts a video
+   finishes late. LRU eviction (`KARAOKE_CACHE_MAX_GB`, 50) never evicts a video
    still in a queue (re-checked in the `DELETE`, since followers add songs
    concurrently). Other videos are evicted past 80% of the budget
    (`favourites.NON_FAVOURITE_SHARE`), favourites only past all of it. The repair pass recreates video rows missing for queued songs,
@@ -293,7 +293,10 @@ Everything is deployed by ArgoCD from `~/codes/brassberry/brassberry-gitops`
   OOM-killed 512Mi; Traefik ingress karaoke.dixneuf19.fr; `karaoke-data`
   RWX PVC on `/data`, storage class `nfs-jonbonas`: the NAS), `templates/pdb.yaml` and
   `templates/database-credentials.yaml` (ESO SecretStore copying the DB
-  credentials from namespace `playground-db`).
+  credentials from namespace `playground-db`). There is one deployment, so
+  the app's defaults in `config.py` are the config: the gitops values only set
+  what is specific to it (`KARAOKE_PUBLIC_URL`, `KARAOKE_DATA_DIR`,
+  `KARAOKE_DB_*`). Change a setting here, not in gitops.
 - **Database**: `gitops/playground-db/playground-db/`, shared CNPG cluster
   `playground` (host `playground-rw.playground-db.svc`, one instance on
   k8s-worker-1, barman-cloud backups to S3). Each key of `databases:` gets a
