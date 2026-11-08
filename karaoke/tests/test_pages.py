@@ -95,6 +95,9 @@ def test_reactions_from_the_phone_page(client: TestClient) -> None:
     code = _room(client)
     page = _as(client, code, "Léa").get(f"/r/{code}").text
     assert 'data-react="fire"' in page and 'data-react="confetti"' in page
+    # effects are emoji-only buttons too, named for screen readers
+    assert 'aria-label="Confettis">🎉</button>' in page
+    assert 'aria-label="Pluie de cœurs">💖</button>' in page
     with client.websocket_connect(f"/ws/{code}?role=display") as screen:
         screen.receive_json()
         do = f"/r/{code}/do"
