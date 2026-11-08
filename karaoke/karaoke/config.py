@@ -26,7 +26,7 @@ class Settings:
     channels: list[str] = field(default_factory=_channels)
     # The video cache never grows past this size (see db.Store.evict).
     cache_max_gb: float = field(
-        default_factory=lambda: float(os.environ.get("KARAOKE_CACHE_MAX_GB", "20"))
+        default_factory=lambda: float(os.environ.get("KARAOKE_CACHE_MAX_GB", "50"))
     )
     max_height: int = field(
         default_factory=lambda: int(os.environ.get("KARAOKE_MAX_HEIGHT", "720"))
