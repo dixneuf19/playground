@@ -22,8 +22,10 @@ def _text(limit: int) -> BeforeValidator:
     return BeforeValidator(lambda v: clean_text(v, limit))
 
 
+MAX_NAME = 40
+
 Text = Annotated[str, _text(200)]
-Name = Annotated[str, _text(40)]
+Name = Annotated[str, _text(MAX_NAME)]
 VideoId = Annotated[str, Field(pattern=f"^{VIDEO_ID.pattern}$")]
 Finite = Annotated[float, Field(allow_inf_nan=False)]
 
@@ -95,7 +97,8 @@ class React(Message):
     type: Literal["react"]
     kind: Kind
     count: Annotated[int, Field(ge=1, le=MAX_BATCH)] = 1
-    # Set by the server (the socket, or the phone page's name): the throttle key.
+    # Set by the server: the throttle key, the phone's token (the socket for a
+    # page without one), never a name.
     sender: Name = ""
 
 
@@ -143,3 +146,13 @@ _adapter: TypeAdapter[AnyMessage] = TypeAdapter(AnyMessage)
 def parse(data: Any) -> Message:
     """Raises pydantic.ValidationError when the message makes no sense."""
     return _adapter.validate_python(data)
+
+
+def from_guest(msg: Message, name: str) -> Message:
+    """Who sings or owns a photo is the name the phone holds in the room,
+    never what the message says."""
+    if isinstance(msg, Add):
+        return msg.model_copy(update={"singer": name})
+    if isinstance(msg, PhotoRemove):
+        return msg.model_copy(update={"uploader": name})
+    return msg

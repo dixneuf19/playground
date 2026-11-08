@@ -15,9 +15,9 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ValidationError
 
 from karaoke.cancelled import cancel_reason
-from karaoke.context import GuestName, Services, Svc, guest_name
+from karaoke.context import GuestName, Services, Svc, guest_token
 from karaoke.hub import Client
-from karaoke.messages import parse
+from karaoke.messages import Add, PhotoRemove, from_guest, parse
 from karaoke.photo_files import MAX_PHOTO_BYTES, PhotoRejectedError, image_type
 from karaoke.photos import MAX_PENDING_PER_ROOM, MAX_PENDING_PER_UPLOADER
 
@@ -129,12 +129,10 @@ async def search(
 
 @router.post("/api/rooms/{code}/photos")
 async def upload_photo(
-    code: str, request: Request, svc: Svc, name: GuestName, uploader: str = ""
+    code: str, request: Request, svc: Svc, name: GuestName
 ) -> dict[str, str]:
     code = await room_or_404(svc, code)
-    # The name confirmed for the room wins; `?uploader=` is for phone pages
-    # opened before the htmx one (no room cookie).
-    uploader = name or uploader.strip()[:40] or "Anonyme"
+    uploader = name or "Anonyme"  # the name this phone holds, never the request's
     if int(request.headers.get("content-length") or 0) > MAX_PHOTO_BYTES:
         raise HTTPException(413, "Photo trop lourde")
     photo_id = uuid.uuid4().hex[:12]
@@ -193,7 +191,7 @@ async def ws(
         websocket,
         screen=role == "display",
         html=view == "html",
-        name=guest_name(websocket),
+        token=guest_token(websocket),
     )
     await websocket.accept()
     try:
@@ -203,12 +201,17 @@ async def ws(
         while True:
             try:
                 data = json.loads(await websocket.receive_text())
-                if isinstance(data, dict):  # reactions are throttled per socket
-                    data["sender"] = f"ws:{id(client)}"
+                if isinstance(data, dict):  # reactions are throttled per phone
+                    data["sender"] = client.token or f"ws:{id(client)}"
                 msg = parse(data)
             except (ValueError, ValidationError) as e:
                 logger.warning("Bad message in %s: %s", code, e)
                 continue
+            if isinstance(msg, Add | PhotoRemove):
+                name = ""
+                if client.token and not client.screen:
+                    name = await svc.store.guest_name(code, client.token)
+                msg = from_guest(msg, name)
             await svc.actions.handle(code, msg, from_screen=client.screen)
     except WebSocketDisconnect:
         pass

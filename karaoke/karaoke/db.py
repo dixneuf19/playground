@@ -15,6 +15,7 @@ from typing import Any
 
 import asyncpg
 
+from karaoke.messages import MAX_NAME
 from karaoke.photos import (
     MAX_PENDING_PER_ROOM,
     MAX_PENDING_PER_UPLOADER,
@@ -100,7 +101,22 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX IF NOT EXISTS plays_played_at ON plays (played_at);
     """,
+    # 4: who holds which name in a room: one name per phone, one phone per name.
+    """
+    CREATE TABLE IF NOT EXISTS guests (
+        room_code text NOT NULL REFERENCES rooms(code) ON DELETE CASCADE,
+        token     text NOT NULL,
+        name      text NOT NULL,
+        last_seen timestamptz NOT NULL,
+        PRIMARY KEY (room_code, token),
+        UNIQUE (room_code, name)
+    );
+    """,
 ]
+
+# A name whose phone has had no socket open for this long goes to whoever
+# asks for it (a new phone, cleared cookies). Sockets refresh it every 30 s.
+NAME_RELEASE_SECONDS = 120.0
 
 POPULAR_DAYS = 30
 POPULAR_LIMIT = 20
@@ -135,7 +151,8 @@ class RoomTx:
     # screen (deleted after the screens fade it out).
     removed_photos: list[str] = field(default_factory=list)
     hidden_photo: str | None = None
-    _loaded_pending: set[str] = field(default_factory=set)
+    # id -> uploader of the photos pending when loaded
+    _loaded_pending: dict[str, str] = field(default_factory=dict)
     _loaded_current: str | None = None
     _loaded_photo: str | None = None
 
@@ -255,7 +272,7 @@ class Store:
             tx = RoomTx(
                 conn,
                 room,
-                _loaded_pending={p.id for p in room.photos.pending},
+                _loaded_pending={p.id: p.uploader for p in room.photos.pending},
                 _loaded_current=room.current.id if room.current else None,
                 _loaded_photo=room.photo.id if room.photo else None,
             )
@@ -394,7 +411,7 @@ class Store:
             )
         # Photos that left the pending queue: shown (now on screen) or cancelled
         remaining = {p.id for p in room.photos.pending}
-        for photo_id in tx._loaded_pending - remaining:
+        for photo_id in tx._loaded_pending.keys() - remaining:
             if room.photo and room.photo.id == photo_id:
                 await conn.execute(
                     "UPDATE photos SET state = 'shown', shown_turn = $2 WHERE id = $1",
@@ -404,6 +421,16 @@ class Store:
             else:
                 await conn.execute("DELETE FROM photos WHERE id = $1", photo_id)
                 tx.removed_photos.append(photo_id)
+        # Photos still pending whose uploader changed name (Room.rename_guest)
+        renamed = [
+            (p.id, p.uploader)
+            for p in room.photos.pending
+            if tx._loaded_pending.get(p.id, p.uploader) != p.uploader
+        ]
+        if renamed:
+            await conn.executemany(
+                "UPDATE photos SET uploader = $2 WHERE id = $1", renamed
+            )
         if tx._loaded_photo and tx._loaded_photo != (room.photo and room.photo.id):
             tx.hidden_photo = tx._loaded_photo
 
@@ -446,6 +473,87 @@ class Store:
 
     async def room_codes(self) -> set[str]:
         return {r["code"] for r in await self.pool.fetch("SELECT code FROM rooms")}
+
+    # --- guests -------------------------------------------------------------
+
+    async def guest_name(self, code: str, token: str) -> str:
+        """The name this phone holds in the room, or ""."""
+        name = await self.pool.fetchval(
+            "SELECT name FROM guests WHERE room_code = $1 AND token = $2",
+            code.upper(),
+            token,
+        )
+        return name or ""
+
+    async def guest_names(self, code: str) -> dict[str, str]:
+        """token -> name, for every phone holding a name in the room."""
+        rows = await self.pool.fetch(
+            "SELECT token, name FROM guests WHERE room_code = $1", code.upper()
+        )
+        return {r["token"]: r["name"] for r in rows}
+
+    @staticmethod
+    async def claim_name(tx: RoomTx, token: str, name: str, now: float) -> str | None:
+        """Give the name to this phone and return the one it held before (""
+        if none); None while another phone holding it was seen recently.
+
+        Runs inside `room_tx`: claims in a room are serialized by the room row
+        lock, and the caller moves the old name's songs and photos in the same
+        transaction (Room.rename_guest)."""
+        conn, code = tx.conn, tx.room.code
+        rows = await conn.fetch(
+            """SELECT token, name, extract(epoch FROM last_seen)::float8 AS seen
+               FROM guests WHERE room_code = $1 AND (name = $2 OR token = $3)""",
+            code,
+            name,
+            token,
+        )
+        previous = next((r["name"] for r in rows if r["token"] == token), "")
+        holder = next((r for r in rows if r["name"] == name), None)
+        if holder and holder["token"] != token:
+            if holder["seen"] > now - NAME_RELEASE_SECONDS:
+                return None
+            await conn.execute(
+                "DELETE FROM guests WHERE room_code = $1 AND token = $2",
+                code,
+                holder["token"],
+            )
+        await conn.execute(
+            """INSERT INTO guests (room_code, token, name, last_seen)
+               VALUES ($1, $2, $3, to_timestamp($4))
+               ON CONFLICT (room_code, token)
+               DO UPDATE SET name = $3, last_seen = to_timestamp($4)""",
+            code,
+            token,
+            name,
+            now,
+        )
+        return previous
+
+    async def suggest_name(self, code: str, name: str) -> str:
+        """`name 2`, `name 3`…: the first one nobody holds in the room."""
+        taken = set((await self.guest_names(code)).values())
+        n = 2
+        while True:
+            suffix = f" {n}"
+            candidate = name[: MAX_NAME - len(suffix)].rstrip() + suffix
+            if candidate not in taken:
+                return candidate
+            n += 1
+
+    async def touch_guests(self, phones: list[tuple[str, str]], now: float) -> None:
+        """Presence: these (room, token) phones have a socket open right now."""
+        if not phones:
+            return
+        codes, tokens = zip(*phones, strict=True)
+        await self.pool.execute(
+            """UPDATE guests g SET last_seen = to_timestamp($3)
+               FROM unnest($1::text[], $2::text[]) AS p(room_code, token)
+               WHERE g.room_code = p.room_code AND g.token = p.token""",
+            list(codes),
+            list(tokens),
+            now,
+        )
 
     # --- photos -------------------------------------------------------------
 

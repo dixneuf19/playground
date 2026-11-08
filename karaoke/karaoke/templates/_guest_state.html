@@ -15,6 +15,11 @@ hx-post="{{ do }}" hx-vals='{{ vals|tojson }}' hx-swap="none"
 {%- if confirm %} hx-confirm="{{ confirm }}" data-confirm-title="{{ title }}" data-confirm-yes="{{ yes }}"{% endif %}
 {%- endmacro %}
 
+{# Pushed too: a phone whose name was taken over by another one shows "?". #}
+{% macro me_button() %}
+<button class="me" id="me-btn" data-me="{{ me }}" {{ o }}>🎤 <span>{{ me or "?" }}</span></button>
+{% endmacro %}
+
 {# Spans, not divs: it also goes inside the #now-mini button. #}
 {% macro now_meta() %}
 <img src="{{ c.thumbnail }}" alt="">

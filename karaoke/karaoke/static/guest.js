@@ -1,42 +1,45 @@
 // Phone page. The server renders everything (karaoke/templates) and keeps it up
 // to date over the WebSocket (htmx 4 + hx-ws, fragments morphed in by id).
-// What's left here is what only the browser can do: tabs, the name cookie,
+// What's left here is what only the browser can do: tabs, the name sheet,
 // confirmation sheets, toasts, drag and drop, resizing photos before upload.
 const $ = (id) => document.getElementById(id);
 const CODE = document.body.dataset.code;
-// The name confirmed for this room; the last one used anywhere is only a
-// suggestion, prefilled by the server when joining another room.
-const NAME_COOKIE = `karaoke_name_${CODE}`;
-const LAST_NAME_COOKIE = "karaoke_name";
-const ROOM_COOKIE_AGE = 2 * 24 * 3600; // rooms expire after a day
 
 // --- name -------------------------------------------------------------------
-function cookieName() {
-  const m = document.cookie.match(new RegExp(`(?:^|; )${NAME_COOKIE}=([^;]*)`));
-  return m ? decodeURIComponent(m[1]) : "";
-}
-function saveName(name) {
-  const value = encodeURIComponent(name);
-  document.cookie = `${NAME_COOKIE}=${value}; path=/; max-age=${ROOM_COOKIE_AGE}; samesite=lax`;
-  document.cookie = `${LAST_NAME_COOKIE}=${value}; path=/; max-age=31536000; samesite=lax`;
-  localStorage.removeItem("karaoke.name"); // the pre-cookie name, now superseded
-}
+// The server keeps who holds which name in the room (one phone per name) and
+// sets the cookies; the header button carries the name this phone holds.
+const myName = () => $("me-btn").dataset.me;
 // Phones that picked a name before cookies: suggest it, still to confirm.
 const legacyName = localStorage.getItem("karaoke.name");
 if (legacyName && !$("name-input").value) $("name-input").value = legacyName;
 function askName() {
+  $("name-error").classList.add("hidden");
   $("name-sheet").classList.remove("hidden");
   setTimeout(() => $("name-input").focus(), 50);
 }
-$("name-form").onsubmit = (e) => {
+$("name-form").onsubmit = async (e) => {
   e.preventDefault();
   // By code point, like the server: never splits an emoji.
   const name = [...$("name-input").value.trim()].slice(0, 40).join("");
   if (!name) return;
-  saveName(name);
-  location.reload(); // the server renders "moi", my photos… for this name
+  let res;
+  try {
+    res = await fetch(`/r/${CODE}/name`, { method: "POST", body: new URLSearchParams({ name }) });
+  } catch { toast("Pas de réseau ?"); return; }
+  if (res.ok) {
+    localStorage.removeItem("karaoke.name"); // the pre-cookie name, now superseded
+    location.reload(); // the server renders "moi", my photos… for this name
+    return;
+  }
+  const body = await res.json().catch(() => ({}));
+  $("name-error").textContent = (body.detail || "Oups, ça n'a pas marché") +
+    // French spacing, and the suggested name kept on one line
+    (body.suggestion ? `. Et «\u00a0${body.suggestion.replaceAll(" ", "\u00a0")}\u00a0»\u00a0?` : "");
+  $("name-error").classList.remove("hidden");
+  if (body.suggestion) $("name-input").value = body.suggestion;
 };
-$("me-btn").onclick = askName;
+// Delegated: the button is replaced by pushes.
+document.addEventListener("click", (e) => { if (e.target.closest("#me-btn")) askName(); });
 
 // --- tabs -------------------------------------------------------------------
 function show(view) {
@@ -80,7 +83,7 @@ function confirmSheet(title, text, yes = "Oui") {
 // Adding a song needs a name: it shows on the big screen. Checked before the
 // confirmation sheet, which would be pointless without one.
 document.addEventListener("htmx:config:request", (e) => {
-  if (e.detail.ctx.sourceElement.matches("[data-added]") && !cookieName()) {
+  if (e.detail.ctx.sourceElement.matches("[data-added]") && !myName()) {
     e.preventDefault();
     askName();
   }
@@ -221,7 +224,7 @@ $("photo-input").onchange = async (e) => {
   const files = [...e.target.files];
   e.target.value = "";
   if (!files.length) return;
-  if (!cookieName()) { askName(); return; }
+  if (!myName()) { askName(); return; }
   let sent = 0, failed = 0, lastError = "";
   $("sending").classList.remove("hidden");
   for (const [i, file] of files.entries()) {

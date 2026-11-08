@@ -1,13 +1,15 @@
 from collections.abc import Callable
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from starlette.testclient import WebSocketTestSession
 
+from karaoke import db
 from karaoke.app import create_app
 from karaoke.config import Settings
 from karaoke.reactions import BURST
-from tests.conftest import freeze_reactions, services
+from tests.conftest import claim, freeze_reactions, phone, services
 
 JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 100
 
@@ -38,7 +40,7 @@ def test_room_creation_requires_password(client: TestClient) -> None:
     code = _room(client)
 
     room = client.get(f"/api/rooms/{code}").json()
-    assert room["join_url"] == f"https://k.example/r/{code}"
+    assert room["join_url"] == f"http://k.example/r/{code}"
     assert client.get(f"/r/{code}").status_code == 200
     assert client.get(f"/r/{code.lower()}").status_code == 200
     assert client.get(f"/display/{code}").status_code == 200
@@ -74,11 +76,10 @@ def test_join_url_replaces_localhost_with_lan_ip(
 
 def test_queue_over_websocket(client: TestClient) -> None:
     code = _room(client)
+    claim(client, code, "Léa")
     with client.websocket_connect(f"/ws/{code}") as guest:
         guest.receive_json()
-        guest.send_json(
-            {"type": "add", "video_id": "abcdefghijk", "title": "Song", "singer": "Léa"}
-        )
+        guest.send_json({"type": "add", "video_id": "abcdefghijk", "title": "Song"})
         state = _state(guest, lambda r: r["queue"])
         assert [(i["title"], i["singer"]) for i in state["queue"]] == [("Song", "Léa")]
 
@@ -181,13 +182,54 @@ def test_reactions_reach_screens_only_and_are_throttled_per_socket(
         assert guest.receive_json()["type"] == "state"
 
 
+def test_a_phone_s_sockets_share_one_reaction_bucket(client: TestClient) -> None:
+    freeze_reactions(client)
+    code = _room(client)
+    claim(client, code, "Léa")  # the phone now has a token
+    with (
+        client.websocket_connect(f"/ws/{code}?role=display") as screen,
+        client.websocket_connect(f"/ws/{code}") as tab_1,
+        client.websocket_connect(f"/ws/{code}") as tab_2,
+    ):
+        for ws in (screen, tab_1, tab_2):
+            ws.receive_json()
+        for ws in (tab_1, tab_2, tab_1, tab_2, tab_1, tab_2):
+            ws.send_json({"type": "react", "kind": "fire", "count": 10})
+        fire = 0
+        while fire < BURST:  # each tab alone would get BURST
+            fire += _until(screen, lambda m: m["type"] == "command")["count"]
+        tab_2.send_json({"type": "volume", "value": 0.5})
+        assert _until(screen, lambda m: m["type"] == "command")["action"] == "volume"
+    assert fire == BURST
+
+
+def test_names_are_shared_by_the_replicas(
+    make_settings: Callable[..., Settings], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = make_settings()
+    with TestClient(create_app(cfg)) as a, TestClient(create_app(cfg)) as b:
+        _no_downloads(a)
+        _no_downloads(b)
+        code = a.post("/api/rooms", json={}).json()["code"]
+        assert a.post(f"/r/{code}/name", data={"name": "Léa"}).status_code == 204
+        with a.websocket_connect(f"/ws/{code}?view=html") as lea_on_a:
+            assert 'data-me="Léa"' in lea_on_a.receive_text()
+            # Another phone, served by the other replica
+            assert b.post(f"/r/{code}/name", data={"name": "Léa"}).status_code == 409
+            monkeypatch.setattr(db, "NAME_RELEASE_SECONDS", -1)  # gone long enough
+            assert b.post(f"/r/{code}/name", data={"name": "Léa"}).status_code == 204
+            # Replica a pushes the change to the phone that lost the name
+            assert 'data-me=""' in lea_on_a.receive_text()
+
+
 def test_media_404_when_not_cached(client: TestClient) -> None:
     assert client.get("/media/nothere.mp4").status_code == 404
 
 
 def test_photo_upload_is_validated_and_anonymous(client: TestClient) -> None:
     code = _room(client)
-    url = f"/api/rooms/{code}/photos?uploader=Léa"
+    claim(client, code, "Léa")
+    url = f"/api/rooms/{code}/photos"
     assert client.post(url, content=b"not an image").status_code == 415
 
     with client.websocket_connect(f"/ws/{code}") as guest:
@@ -208,9 +250,13 @@ def test_photo_upload_is_validated_and_anonymous(client: TestClient) -> None:
 
 def test_photos_are_mixed_fairly(client: TestClient) -> None:
     code = _room(client)
+    phones = {
+        "lea": claim(client, code, "lea"),
+        "tom": claim(phone(client), code, "tom"),
+    }
     ids = {}
     for who in ("lea", "lea", "lea", "tom"):
-        res = client.post(f"/api/rooms/{code}/photos?uploader={who}", content=JPEG)
+        res = phones[who].post(f"/api/rooms/{code}/photos", content=JPEG)
         ids[res.json()["id"]] = who
     room = client.get(f"/api/rooms/{code}").json()
     order = ([room["photo"]["id"]] if room["photo"] else []) + [
@@ -221,24 +267,50 @@ def test_photos_are_mixed_fairly(client: TestClient) -> None:
 
 def test_photo_cancel_needs_the_uploader(client: TestClient) -> None:
     code = _room(client)
-    url = f"/api/rooms/{code}/photos?uploader=Léa"
-    client.post(url, content=JPEG)  # goes on screen
-    waiting = client.post(url, content=JPEG).json()["id"]
+    lea = claim(client, code, "Léa")
+    url = f"/api/rooms/{code}/photos"
+    lea.post(url, content=JPEG)  # goes on screen
+    waiting = lea.post(url, content=JPEG).json()["id"]
 
-    with client.websocket_connect(f"/ws/{code}") as guest:
-        guest.receive_json()
-        guest.send_json(
-            {"type": "photo_remove", "photo_id": waiting, "uploader": "Tom"}
-        )
-        guest.send_json(
+    tom = claim(phone(client), code, "Tom")
+    with tom.websocket_connect(f"/ws/{code}") as on_tom:
+        on_tom.receive_json()
+        # Saying "Léa" doesn't make Tom her: the name comes from his phone
+        on_tom.send_json(
             {"type": "photo_remove", "photo_id": waiting, "uploader": "Léa"}
         )
-        _state(guest, lambda r: all(p["id"] != waiting for p in r["photos"]))
+        on_tom.send_json({"type": "volume", "value": 0.5})  # handled after it
+        state = _state(on_tom, lambda r: r["volume"] == 0.5)
+        assert waiting in [p["id"] for p in state["photos"]]
+    with lea.websocket_connect(f"/ws/{code}") as on_lea:
+        on_lea.receive_json()
+        on_lea.send_json({"type": "photo_remove", "photo_id": waiting})
+        _state(on_lea, lambda r: all(p["id"] != waiting for p in r["photos"]))
+
+
+def test_names_come_from_the_phone_never_the_request(client: TestClient) -> None:
+    code = _room(client)
+    claim(client, code, "Léa")
+    nameless = phone(client)
+    forged = [
+        nameless.post(f"/api/rooms/{code}/photos?uploader=Léa", content=JPEG)
+        for _ in range(2)
+    ]
+    assert all(r.status_code == 200 for r in forged)
+    leas_page = client.get(f"/r/{code}/state").text
+    assert all(r.json()["id"] not in leas_page for r in forged)
+    for n, (who, expected) in enumerate(((nameless, "Anonyme"), (client, "Léa")), 1):
+        with who.websocket_connect(f"/ws/{code}") as ws:
+            ws.receive_json()
+            ws.send_json({"type": "add", "video_id": "abcdefghijk", "singer": "Liar"})
+            state = _state(ws, lambda r, n=n: len(r["queue"]) == n)
+            assert state["queue"][-1]["singer"] == expected
 
 
 def test_photo_limit_per_uploader(client: TestClient) -> None:
     code = _room(client)
-    url = f"/api/rooms/{code}/photos?uploader=spam"
+    claim(client, code, "spam")
+    url = f"/api/rooms/{code}/photos"
     statuses = [client.post(url, content=JPEG).status_code for _ in range(32)]
     assert 429 in statuses
 

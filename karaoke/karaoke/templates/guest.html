@@ -22,7 +22,7 @@
   <header>
     <span class="brand">Karaoké</span>
     <span class="room muted">salle <span class="code">{{ room.code }}</span></span>
-    <button class="me" id="me-btn">🎤 <span>{{ me or "?" }}</span></button>
+    {{ state.me_button() }}
   </header>
 
   <main>
@@ -78,6 +78,7 @@
         {% if suggested and not me %}Garde celui de la dernière fois ou change-le pour cette soirée.{% endif %}
       </p>
       <input class="field" id="name-input" maxlength="40" placeholder="Ton prénom" autocomplete="given-name" required value="{{ suggested }}">
+      <p class="name-error hidden" id="name-error"></p>
       <div class="actions"><button class="btn btn-primary" type="submit">{{ "C'est moi" if suggested and not me else "C'est parti" }}</button></div>
     </form>
   </div>

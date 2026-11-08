@@ -68,6 +68,22 @@ class Actions:
         self.photos.cleanup(tx)
         return tx.room if tx else None
 
+    async def claim_name(self, code: str, token: str, name: str) -> bool | None:
+        """The name sheet. False while another phone holds the name; None if
+        the room is gone. The phone's queued songs and pending photos follow
+        it to the new name, in the same transaction."""
+        async with self.store.room_tx(code) as tx:
+            if tx is None:
+                return None
+            previous = await self.store.claim_name(tx, token, name, time.time())
+            if previous is None:
+                tx.save = False
+                return False
+            # Saved even when nothing moved: the NOTIFY makes the phone that
+            # just lost the name drop it.
+            tx.room.rename_guest(previous, name)
+        return True
+
     async def _apply(self, tx: RoomTx, msg: Message) -> bool:
         """Change the locked room; False when nothing changed."""
         room, now = tx.room, time.time()

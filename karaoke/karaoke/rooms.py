@@ -131,6 +131,17 @@ class Room:
         self.queue.insert(index, item)
         return True
 
+    def rename_guest(self, old: str, new: str) -> bool:
+        """A guest changed name: their queued songs and pending photos follow
+        them, so whoever takes the old name next gets none of it. The song
+        playing keeps the name the screen announced."""
+        if not old or old == new:
+            return False
+        songs = [i for i in self.queue if i.singer == old]
+        for item in songs:
+            item.singer = new
+        return self.photos.rename(old, new) or bool(songs)
+
     def position_of(self, video_id: str, singer: str) -> int | None:
         """1-based place of this singer's latest request for this video, the
         current song being 1."""

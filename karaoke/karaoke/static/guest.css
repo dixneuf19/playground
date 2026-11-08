@@ -142,6 +142,7 @@ nav .badge { position: absolute; top: 2px; left: 55%; background: var(--pink); c
 .sheet p { margin: 0 0 16px; }
 .sheet .actions { display: flex; gap: 10px; margin-top: 14px; }
 .sheet .actions .btn { flex: 1; }
+.sheet .name-error { margin: 10px 0 0; color: var(--red); font-weight: 600; }
 
 #offline { display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 60; background: var(--red); color: white; text-align: center; padding: calc(4px + env(safe-area-inset-top)) 0 4px; font-size: 0.85rem; font-weight: 600; }
 body.offline #offline { display: block; }
