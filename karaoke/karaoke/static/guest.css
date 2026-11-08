@@ -93,11 +93,11 @@ input[type=range] { flex: 1; min-width: 0; accent-color: var(--pink); height: 28
 
 /* reactions on the big screen: compact, between the player and the queue */
 .reactions { margin: 12px 0 18px; }
-.palette { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
-.palette.effects { grid-template-columns: 1fr 1fr; margin-top: 6px; }
+.palette { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .react { position: relative; height: 42px; min-width: 0; border-radius: 12px; background: var(--surface-2); font-size: 1.35rem;
   touch-action: manipulation; user-select: none; -webkit-user-select: none; }
-.react.effect { height: 36px; font-size: 0.9rem; font-weight: 700; background: rgba(255, 61, 139, 0.12); border: 1.5px solid rgba(255, 61, 139, 0.4); }
+/* effects: same button, a pink → violet tint so the bigger effect shows */
+.react.effect { background: linear-gradient(135deg, rgba(255, 61, 139, 0.32), rgba(123, 92, 255, 0.32)); }
 .react:active { transform: scale(0.9); }
 .react .puff { position: absolute; left: 50%; top: 0; pointer-events: none; font-size: 1.4rem;
   transform: translate(-50%, 0); animation: puff 0.7s ease-out forwards; }
