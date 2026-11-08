@@ -21,13 +21,15 @@ hx-post="{{ do }}" hx-vals='{{ vals|tojson }}' hx-swap="none"
 <button class="me" id="me-btn" data-me="{{ me }}" {{ o }}>🎤 <span>{{ me or "?" }}</span></button>
 {% endmacro %}
 
-{# Spans, not divs: it also goes inside the #now-mini button. #}
-{% macro now_meta() %}
+{# Spans, not divs: it also goes inside the #now-mini button, which can't
+   hold the 🚫 chip (a button): only the player asks for it. #}
+{% macro now_meta(cancel=False) %}
 <img src="{{ c.thumbnail }}" alt="">
 <span class="meta">
   <span class="label"><span class="eq"><i></i><i></i><i></i></span>{{ "En pause" if paused else "En cours" }}</span>
   <span class="t ellipsis">{{ c.title }}</span>
   <span class="muted ellipsis small">{{ c.singer }}{% if c.artist %} · {{ c.artist }}{% endif %}</span>
+  {% if cancel %}<span class="tags">{{ song.cancel(c.artist, c.cancelled) }}</span>{% endif %}
 </span>
 {% endmacro %}
 
@@ -48,7 +50,7 @@ hx-post="{{ do }}" hx-vals='{{ vals|tojson }}' hx-swap="none"
   <p class="waiting muted">Rien ne joue : les chansons de la file n'ont pas pu être téléchargées.</p>
   {% endif %}
   {% elif c %}
-  <div class="row">{{ now_meta() }}{{ song.heart(room.code, c.video_id, c.title, c.artist, c.video_id in hearted) }}</div>
+  <div class="row">{{ now_meta(cancel=True) }}{{ song.heart(room.code, c.video_id, c.title, c.artist, c.video_id in hearted) }}</div>
   <div class="controls">
     <button class="ctl" aria-label="Recommencer" {{ action({"type": "restart"}) }}>⟲</button>
     <button class="ctl main" aria-label="{{ 'Lecture' if paused else 'Pause' }}"
@@ -83,12 +85,12 @@ hx-post="{{ do }}" hx-vals='{{ vals|tojson }}' hx-swap="none"
       <span class="handle">⠿</span>
       <span class="pos">{{ loop.index }}</span>
       <img src="{{ i.thumbnail }}" alt="">
-      <div class="meta" data-artist='{{ {"artist": i.artist|main_artist, "cancel": i.cancelled.details() if i.cancelled else none}|tojson }}'>
+      <div class="meta">
         <div class="t ellipsis">{{ i.title }}</div>
         <div class="sub">
           <span class="ellipsis">{{ i.singer }}</span>
           {% if mine %}<span class="tag tag-me">moi</span>{% endif %}
-          {% if i.cancelled %}<span class="tag tag-cancel">🚫</span>{% endif %}
+          {{ song.cancel(i.artist, i.cancelled) }}
           {% if i.status == "ready" %}
           <span class="tag tag-ready">Prêt</span>
           {% elif i.status == "error" %}

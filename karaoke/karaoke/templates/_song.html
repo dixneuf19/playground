@@ -6,6 +6,10 @@
   heart: the ❤️ button. The favourites are shared by every room, so taking
   one out asks first. The response is the button in its new state (search
   results are not pushed); the queue and the favourites list also follow by push.
+  cancel: the 🚫 chip, in the tags row under the title, opening the artist
+  sheet (guest.js) to cancel the artist; "🚫 Cancel" once they are, to see
+  why and dé-cancel them. A chip rather than a button column, so titles keep
+  their width on a phone.
   add: queues the song for this guest (`done` once they have it queued).
 #}
 {% macro heart(code, video_id, title, artist, on) -%}
@@ -18,6 +22,15 @@
   data-confirm-title="Retirer des favoris ?" data-confirm-yes="Retirer"
   {% endif %}
   >{{ "❤️" if on else "🤍" }}</button>
+{%- endmacro %}
+
+{# artist: prefills the sheet with its first name. cancelled: the
+   Cancellation, or None. #}
+{% macro cancel(artist, cancelled) -%}
+<button type="button" class="cancel-chip{{ ' on' if cancelled }}"
+  aria-label="{{ "Voir le cancel" if cancelled else "Cancel l'artiste" }}"
+  data-artist='{{ {"artist": artist|main_artist, "cancel": cancelled.details() if cancelled else none}|tojson }}'
+  ><span class="tag{{ ' tag-cancel' if cancelled }}">🚫{{ " Cancel" if cancelled }}</span></button>
 {%- endmacro %}
 
 {% macro add(code, video_id, title, artist, cancelled, done) -%}
@@ -35,18 +48,18 @@
   cancelled: the Cancellation, or None. ready: in the video cache. done: this
   guest has it queued. hearted: a favourite. id: the card's element id, if any.
   artist: the parsed one, "" for YouTube results, which show their `channel`
-  instead (never queued or matched as the artist). Tapping the song opens the
-  artist sheet (guest.js).
+  instead (never queued or matched as the artist). The card's body does
+  nothing on a tap: its buttons do.
 #}
 {% macro card(code, video_id, title, artist, thumbnail, cancelled, ready, done, hearted,
               curated=True, duration=None, plays=0, id=None, channel="") %}
 <div class="card song"{% if id %} id="{{ id }}"{% endif %}>
   <img src="{{ thumbnail }}" alt="" loading="lazy">
-  <div class="meta" data-artist='{{ {"artist": artist|main_artist, "cancel": cancelled.details() if cancelled else none}|tojson }}'>
+  <div class="meta">
     <div class="t">{{ title }}</div>
     <div class="a ellipsis">{{ artist or channel }}</div>
     <div class="tags">
-      {% if cancelled %}<span class="tag tag-cancel">🚫 Cancel</span>{% endif %}
+      {{ cancel(artist, cancelled) }}
       {% if not curated %}<span class="tag tag-yt">YouTube</span>{% endif %}
       {% if ready %}<span class="tag tag-ready">Prêt</span>{% endif %}
       {% if plays %}<span class="tag">🎤 {{ plays }} fois</span>{% endif %}

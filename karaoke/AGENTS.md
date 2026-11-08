@@ -38,8 +38,13 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
 - **Cancelled artists** stay playable but are flagged; the phone asks for a
   "J'assume" confirmation. Any guest cancels an artist (prefilled with the
   song's first artist, editable, plus a reason) or uncancels one, from the
-  sheet that opens on tapping a song (results, popular songs, favourites,
-  queue). The cancel is signed with the name the phone holds. Global to
+  sheet opened by the 🚫 chip in the tags row under every song's title
+  (results, popular songs, favourites, queue, player; `song.cancel`): a
+  muted 🚫 alone, or the orange "🚫 Cancel" once cancelled. A chip, not a
+  third button column, so titles keep their width at 390px; its button is
+  32px tall with negative margins, so the row doesn't grow. A tap on a
+  card's body does nothing: guests took it for selecting the song. The
+  search tab's mini player is itself a button, so it has no chip. The cancel is signed with the name the phone holds. Global to
   every room (`cancelled_artists` table, keyed by the normalized name, with
   reason, guest name and date; Michel Sardou is the first row). The flag is
   computed server-side on every load, never trusted from the phone, so
@@ -121,7 +126,7 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
 | `cancelled.py` | `Cancellation` (its key normalized once per row), `find` (whole names and duet parts, 2+-word names in titles), `split_artist`. Pure; the rows live in `db.py`. |
 | `config.py` | `Settings` from `KARAOKE_*` env vars. |
 | `app.py` | Wiring only: builds the services, includes the routers. |
-| `templates/` | `guest.html` (+ `_guest_state.html` fragments, `_guest_push.html`, `_results.html`, `_song.html`: the song card with its ❤️ and + buttons, shared by results, popular songs and favourites), `display.html`, `index.html`. |
+| `templates/` | `guest.html` (+ `_guest_state.html` fragments, `_guest_push.html`, `_results.html`, `_song.html`: the song card with its ❤️ and + buttons and the 🚫 chip, shared by results, popular songs and favourites), `display.html`, `index.html`. |
 | `static/` | `guest.js`/`guest.css`, `display.js`/`display.css`, `common.js` (screen socket + `esc`), `app.css`. htmx 4 (+ its `hx-ws` extension) and SortableJS come from jsDelivr in `guest.html`, pinned with an integrity hash. No build step. |
 | `scripts/sri.py` | Recomputes (`make sri`) or checks (`make check-sri`, in CI) the integrity hashes of CDN scripts in the templates. |
 

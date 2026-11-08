@@ -126,14 +126,13 @@ $("q").addEventListener("input", () => {
 $("search-form").addEventListener("submit", () => $("q").blur());
 
 // --- cancelled artists ------------------------------------------------------
-// Tapping a song opens the artist sheet: cancel the artist with a reason, or
-// see why it is cancelled and uncancel it. The server sends the details.
+// A song's 🚫 button opens the artist sheet: cancel the artist with a reason,
+// or see why it is cancelled and uncancel it. The server sends the details.
 function closeArtist() { $("artist-sheet").classList.add("hidden"); }
 document.addEventListener("click", (e) => {
   if (e.target.closest("[data-close]")) { closeArtist(); return; }
-  const el = e.target.closest("[data-artist]");
-  // Buttons inside the song (Réessayer…) do their own thing
-  if (!el || e.target.closest("button, a, [hx-post]")) return;
+  const el = e.target.closest("button[data-artist]");
+  if (!el) return;
   const { artist, cancel } = JSON.parse(el.dataset.artist);
   $("cancel-form").classList.toggle("hidden", !!cancel);
   $("uncancel-form").classList.toggle("hidden", !cancel);
