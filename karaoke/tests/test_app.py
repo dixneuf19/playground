@@ -33,6 +33,7 @@ def _state(ws: WebSocketTestSession, check: Callable[[dict[str, Any]], bool]) ->
 
 def _no_downloads(client: TestClient) -> None:
     services(client).worker.download_videos = False
+    services(client).worker.check_titles = False
 
 
 def test_room_creation_requires_password(client: TestClient) -> None:

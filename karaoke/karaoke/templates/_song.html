@@ -8,11 +8,11 @@
   results are not pushed); the queue and the favourites list also follow by push.
   add: queues the song for this guest (`done` once they have it queued).
 #}
-{% macro heart(code, video_id, title, on) -%}
+{% macro heart(code, video_id, title, artist, on) -%}
 <button class="heart{{ ' on' if on }}" aria-pressed="{{ 'true' if on else 'false' }}"
   aria-label="{{ 'Retirer des favoris' if on else 'Ajouter aux favoris' }}"
   hx-post="/r/{{ code }}/heart" hx-swap="outerHTML"
-  hx-vals='{{ {"type": "heart", "video_id": video_id, "on": not on}|tojson }}'
+  hx-vals='{{ {"type": "heart", "video_id": video_id, "title": title, "artist": artist, "on": not on}|tojson }}'
   {% if on %}
   hx-confirm="« {{ title }} » disparaîtra des favoris de tout le monde."
   data-confirm-title="Retirer des favoris ?" data-confirm-yes="Retirer"
@@ -50,7 +50,7 @@
       {% if duration %}<span class="tag">{{ duration|duration }}</span>{% endif %}
     </div>
   </div>
-  {{ heart(code, video_id, title, hearted) }}
+  {{ heart(code, video_id, title, artist, hearted) }}
   {{ add(code, video_id, title, artist, cancelled, done) }}
 </div>
 {% endmacro %}

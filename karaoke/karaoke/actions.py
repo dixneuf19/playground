@@ -4,7 +4,6 @@ Runs on any replica. Room changes go through `Store.room_tx` with the logic in
 karaoke.rooms; this module only routes each message to it.
 """
 
-import contextlib
 import logging
 import time
 
@@ -32,24 +31,16 @@ from karaoke.messages import (
 from karaoke.photo_files import PhotoFiles
 from karaoke.reactions import Reactions
 from karaoke.rooms import QueueItem, Room
-from karaoke.search import Searcher
 
 logger = logging.getLogger(__name__)
 
 
-class HeartRefusedError(Exception):
-    """The phone shows the message (in French)."""
-
-
 class Actions:
-    def __init__(
-        self, store: Store, library: Library, photos: PhotoFiles, searcher: Searcher
-    ) -> None:
+    def __init__(self, store: Store, library: Library, photos: PhotoFiles) -> None:
         self.store = store
         self.library = library
         self.photos = photos
         self.reactions = Reactions()
-        self.searcher = searcher
 
     async def handle(self, code: str, msg: Message, from_screen: bool) -> Room | None:
         """Apply a message to the room. Returns the room as it is afterwards
@@ -61,8 +52,7 @@ class Actions:
                 await self._retry(code, msg.item_id)
                 return None
             case Heart():  # favourites belong to every room, not this one
-                with contextlib.suppress(HeartRefusedError):
-                    await self.heart(msg)
+                await self.heart(msg)
                 return None
             case Position():
                 await self.store.save_position(code, msg.item_id, msg.t, time.time())
@@ -145,18 +135,12 @@ class Actions:
         tx.wake_downloads = status == "pending"
         return True
 
-    async def heart(self, msg: Heart) -> str:
-        """Returns the song's title. Raises HeartRefusedError for a video YouTube
-        doesn't know, or when the list is full."""
-        title = artist = ""
-        if msg.on:
-            video = await self.searcher.describe(msg.video_id)
-            if video is None:
-                raise HeartRefusedError("Vidéo introuvable sur YouTube")
-            title, artist = video.title, video.artist or video.channel
-        if not await self.store.set_favourite(msg.video_id, msg.on, title, artist):
-            raise HeartRefusedError("Trop de favoris, retire-en d'abord")
-        return title
+    async def heart(self, msg: Heart) -> bool:
+        """False when the favourites list is full. No YouTube lookup here: the
+        leader checks the phone's title afterwards."""
+        return await self.store.set_favourite(
+            msg.video_id, msg.on, msg.title, msg.artist
+        )
 
     async def _retry(self, code: str, item_id: str) -> None:
         room = await self.store.load_room(code)

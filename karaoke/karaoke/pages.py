@@ -8,7 +8,6 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import ValidationError
 
-from karaoke.actions import HeartRefusedError
 from karaoke.api import room_or_404
 from karaoke.cancelled import cancel_reason
 from karaoke.context import (
@@ -191,12 +190,11 @@ async def heart(code: str, request: Request, svc: Svc) -> HTMLResponse:
         raise HTTPException(422, "Requête invalide") from e
     if not isinstance(msg, Heart):
         raise HTTPException(422, "Requête invalide")
-    try:
-        title = await svc.actions.heart(msg)
-    except HeartRefusedError as e:
-        raise HTTPException(409, str(e)) from e
+    if not await svc.actions.heart(msg):
+        raise HTTPException(409, "Trop de favoris, retire-en d'abord")
     return HTMLResponse(
-        render_heart(code, msg.video_id, title, msg.on), headers=NO_CACHE
+        render_heart(code, msg.video_id, msg.title, msg.artist, msg.on),
+        headers=NO_CACHE,
     )
 
 

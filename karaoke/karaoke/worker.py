@@ -14,11 +14,13 @@ import uuid
 
 from karaoke.config import Settings
 from karaoke.db import Store
+from karaoke.favourites import CHECKS_PER_TICK
 from karaoke.leader import Leadership
 from karaoke.library import Library
 from karaoke.loops import every
 from karaoke.photo_files import PhotoFiles
 from karaoke.rooms import ROOM_TTL_SECONDS
+from karaoke.search import Searcher
 
 logger = logging.getLogger(__name__)
 
@@ -28,18 +30,26 @@ TICK_SECONDS = 0.5
 DOWNLOAD_SCAN = 5  # seconds between scans for pending downloads, if not woken
 REPAIR_EVERY = 15  # seconds between safety-net checks
 PRUNE_EVERY = 600
+CHECK_EVERY = 5  # seconds between checks of new favourites' titles
 
 
 class Worker:
     def __init__(
-        self, cfg: Settings, store: Store, library: Library, photos: PhotoFiles
+        self,
+        cfg: Settings,
+        store: Store,
+        library: Library,
+        photos: PhotoFiles,
+        searcher: Searcher,
     ) -> None:
         self.store = store
         self.library = library
         self.photos = photos
+        self.searcher = searcher
         self.name = os.environ.get("HOSTNAME") or uuid.uuid4().hex[:8]
         self.max_cache_bytes = int(cfg.cache_max_gb * 1024**3)
         self.download_videos = True  # tests turn it off: no YouTube
+        self.check_titles = True  # same
         self.downloading: set[str] = set()  # by this replica, while it leads
         self._wake_downloads = asyncio.Event()
         self._tasks: list[asyncio.Task[None]] = []
@@ -68,6 +78,7 @@ class Worker:
             asyncio.create_task(self._download_loop()),
             asyncio.create_task(every(REPAIR_EVERY, self.repair)),
             asyncio.create_task(every(PRUNE_EVERY, self.prune)),
+            asyncio.create_task(every(CHECK_EVERY, self.check_favourites)),
         ]
 
     async def _follow(self) -> None:
@@ -157,6 +168,22 @@ class Worker:
             await self.store.notify_room(code)
 
     # --- periodic jobs ------------------------------------------------------
+
+    async def check_favourites(self) -> None:
+        """Trust, then verify: new favourites show the phone's title until
+        YouTube's replaces it (a recent search on this replica, else a
+        lookup by id). A video YouTube doesn't know is dropped after a few
+        tries."""
+        if not self.check_titles:
+            return
+        for video_id in await self.store.favourites_to_check(CHECKS_PER_TICK):
+            video = await self.searcher.describe(video_id)
+            if video is None:
+                await self.store.favourite_check_failed(video_id)
+            else:
+                await self.store.verify_favourite(
+                    video_id, video.title, video.artist or video.channel
+                )
 
     async def repair(self) -> None:
         """Safety net: queued songs whose video row or file is gone get

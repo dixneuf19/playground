@@ -137,6 +137,7 @@ def client(make_settings: Callable[..., Settings]) -> Iterator[TestClient]:
         make_settings(host_password="secret", public_url="http://k.example")
     )
     with TestClient(app) as c:
-        # No YouTube in unit tests: downloads never start.
+        # No YouTube in unit tests: downloads and title checks never start.
         services(c).worker.download_videos = False
+        services(c).worker.check_titles = False
         yield c

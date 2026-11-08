@@ -29,16 +29,16 @@ async def start(cfg: Settings) -> Services:
     store = await Store.connect(cfg.dsn())
     library = Library(cfg.songs_dir, cfg.max_height)
     photos = PhotoFiles(cfg.data_dir)
-    worker = Worker(cfg, store, library, photos)
-    hub = Hub(cfg.dsn(), store, render_guest_state, on_downloads=worker.wake)
     searcher = Searcher(cfg.channels)
+    worker = Worker(cfg, store, library, photos, searcher)
+    hub = Hub(cfg.dsn(), store, render_guest_state, on_downloads=worker.wake)
     svc = Services(
         cfg=cfg,
         store=store,
         library=library,
         photos=photos,
         searcher=searcher,
-        actions=Actions(store, library, photos, searcher),
+        actions=Actions(store, library, photos),
         hub=hub,
         worker=worker,
     )
