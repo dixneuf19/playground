@@ -21,7 +21,11 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   word overlap + fuzzy ratio); a song several channels have, or a score tie,
   goes to the higher-priority channel. Each channel orders its titles its own
   way, so a `Channel` carries its title formats (`search.parse_title`): a new
-  channel needs its formats and a test. Searching all of YouTube
+  channel needs its formats, a short `label` and a test. A result card says
+  where its video comes from, so guests can judge it: the curated channel's
+  `label` after the artist ("Renaud · KaraFun FR"), or YouTube's channel name in
+  place of the artist on other results. Popular songs, favourites and the
+  queue don't store the channel, so they don't show it. Searching all of YouTube
   needs an explicit tap and appends " karaoke" to the query. A pasted YouTube link
   resolves that one video; the search placeholder says so, and the intro has no
   paste button (owner's choice). `strong: false` (no result has every query word) makes

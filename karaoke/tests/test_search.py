@@ -183,3 +183,25 @@ def test_describe_uses_recent_searches_then_a_lookup(
         assert await searcher.describe("zzzzzzzzzzz") is None
 
     asyncio.run(main())
+
+
+def test_search_channels_labels_each_result_with_its_channel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    titles = {
+        "karafunfr": "Karaoké Allumer le feu - Johnny Hallyday *",
+        "bdfabkaraoke9959": "Renaud - Manhattan-Kaboul (2002) [BDFab karaoke]",
+    }
+
+    def extract(url: str, _limit: int) -> list[dict]:
+        handle = url.split("@")[1].split("/")[0]
+        n = str(len(handle)).rjust(11, "x")
+        return [{"id": n, "title": titles[handle], "channel": f"{handle} channel"}]
+
+    monkeypatch.setattr(search, "_extract", extract)
+    results = search.search_channels("q", ["karafunfr", "bdfabkaraoke9959"])
+    labels = {r.title: (r.channel_label, r.channel) for r in results}
+    assert labels == {
+        "Allumer le feu": ("KaraFun FR", "karafunfr channel"),
+        "Manhattan-Kaboul": ("BDFab", "bdfabkaraoke9959 channel"),
+    }

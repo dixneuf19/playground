@@ -48,16 +48,19 @@
   cancelled: the Cancellation, or None. ready: in the video cache. done: this
   guest has it queued. hearted: a favourite. id: the card's element id, if any.
   artist: the parsed one, "" for YouTube results, which show their `channel`
-  instead (never queued or matched as the artist). The card's body does
+  instead (never queued or matched as the artist). channel_label: the
+  curated channel's short name, after the artist, on search results only
+  (the other lists don't store the channel). The card's body does
   nothing on a tap: its buttons do.
 #}
 {% macro card(code, video_id, title, artist, thumbnail, cancelled, ready, done, hearted,
-              curated=True, duration=None, plays=0, id=None, channel="") %}
+              curated=True, duration=None, plays=0, id=None, channel="", channel_label="") %}
 <div class="card song"{% if id %} id="{{ id }}"{% endif %}>
   <img src="{{ thumbnail }}" alt="" loading="lazy">
   <div class="meta">
     <div class="t">{{ title }}</div>
-    <div class="a ellipsis">{{ artist or channel }}</div>
+    <div class="a"><span class="ellipsis">{{ artist or channel }}</span>
+      {%- if channel_label %}<span class="src">·&nbsp;{{ channel_label }}</span>{% endif %}</div>
     <div class="tags">
       {{ cancel(artist, cancelled) }}
       {% if not curated %}<span class="tag tag-yt">YouTube</span>{% endif %}
