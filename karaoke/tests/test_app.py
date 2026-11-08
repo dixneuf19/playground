@@ -7,7 +7,7 @@ from starlette.testclient import WebSocketTestSession
 from karaoke.app import create_app
 from karaoke.config import Settings
 from karaoke.reactions import BURST
-from tests.conftest import services
+from tests.conftest import freeze_reactions, services
 
 JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 100
 
@@ -156,6 +156,7 @@ def test_two_replicas_share_rooms(make_settings: Callable[..., Settings]) -> Non
 def test_reactions_reach_screens_only_and_are_throttled_per_socket(
     client: TestClient,
 ) -> None:
+    freeze_reactions(client)
     code = _room(client)
     with (
         client.websocket_connect(f"/ws/{code}?role=display") as screen,

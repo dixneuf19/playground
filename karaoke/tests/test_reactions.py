@@ -1,4 +1,15 @@
-from karaoke.reactions import BURST, EFFECT_COST, MAX_BATCH, RATE, RateLimit, Reactions
+from karaoke.reactions import (
+    BURST,
+    EFFECT_COST,
+    MAX_BATCH,
+    RATE,
+    ROOM_EFFECT_BURST,
+    ROOM_EMOJI_BURST,
+    ROOM_EMOJI_RATE,
+    Kind,
+    RateLimit,
+    Reactions,
+)
 
 
 def test_rate_limit_grants_a_burst_then_refills() -> None:
@@ -43,12 +54,34 @@ def test_emoji_are_counted_and_throttled_per_room_and_sender() -> None:
     assert r.command("ABCD", "Léa", "heart", 1, now=1 / RATE) is not None
 
 
-def test_effects_cost_more() -> None:
+def _sent(r: Reactions, code: str, senders: range, kind: Kind) -> int:
+    total = 0
+    for s in senders:
+        cmd = r.command(code, f"name-{s}", kind, MAX_BATCH, now=0)
+        count = 0 if cmd is None else cmd.get("count", 1)
+        assert isinstance(count, int)
+        total += count
+    return total
+
+
+def test_rotating_names_cannot_exceed_the_room_cap() -> None:
     r = Reactions()
-    effects = 0
-    while r.command("ABCD", "Léa", "confetti", 1, now=0) == {
+    assert _sent(r, "ABCD", range(100), "fire") == ROOM_EMOJI_BURST
+    assert _sent(r, "ABCD", range(100), "confetti") == ROOM_EFFECT_BURST
+    assert _sent(r, "WXYZ", range(100), "fire") == ROOM_EMOJI_BURST  # per room
+    # and it refills at the room's rate
+    assert r.command("ABCD", "new", "fire", MAX_BATCH, now=0.1) == {
         "action": "react",
-        "effect": "confetti",
-    }:
-        effects += 1
-    assert effects == BURST // EFFECT_COST
+        "emoji": "🔥",
+        "count": int(0.1 * ROOM_EMOJI_RATE),
+    }
+
+
+def test_effects_cost_more_and_a_full_room_does_not_drain_its_senders() -> None:
+    r = Reactions()
+    assert BURST // EFFECT_COST > ROOM_EFFECT_BURST
+    assert _sent(r, "ABCD", range(1), "hearts") == 1
+    _sent(r, "ABCD", range(1, 100), "hearts")  # the room's effects are used up
+    for _ in range(10):  # refused: costs Léa nothing
+        assert r.command("ABCD", "Léa", "confetti", 1, now=0) is None
+    assert r.sender.available(("ABCD", "Léa"), now=0) == BURST

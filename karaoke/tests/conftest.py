@@ -18,12 +18,24 @@ from fastapi.testclient import TestClient
 from karaoke.app import create_app
 from karaoke.config import Settings
 from karaoke.context import Services
+from karaoke.reactions import Kind
 
 IMAGE = "postgres:18-alpine"
 
 
 def services(client: TestClient) -> Services:
     return cast(FastAPI, client.app).state.services
+
+
+def freeze_reactions(client: TestClient) -> None:
+    """Reaction buckets stop refilling, so a test can count exact caps."""
+    reactions = services(client).actions.reactions
+    command = reactions.command
+
+    def frozen(code: str, sender: str, kind: Kind, count: int, _now: float):
+        return command(code, sender, kind, count, 0.0)
+
+    setattr(reactions, "command", frozen)  # noqa: B010
 
 
 def _wait_for(url: str, timeout: float = 30) -> None:

@@ -7,8 +7,9 @@ from urllib.parse import quote
 
 from fastapi.testclient import TestClient
 
+from karaoke.reactions import ROOM_EMOJI_BURST
 from karaoke.search import SearchResult
-from tests.conftest import services
+from tests.conftest import freeze_reactions, services
 
 JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 100
 VID = "abcdefghijk"
@@ -114,6 +115,26 @@ def test_reactions_from_the_phone_page(client: TestClient) -> None:
         }
     res = client.post(f"/r/{code}/do", data={"type": "react", "kind": "nope"})
     assert res.status_code == 422
+
+
+def test_a_new_name_cookie_per_request_cannot_flood_the_room(
+    client: TestClient,
+) -> None:
+    freeze_reactions(client)
+    code = _room(client)
+    do = f"/r/{code}/do"
+    with client.websocket_connect(f"/ws/{code}?role=display") as screen:
+        screen.receive_json()
+        for n in range(20):  # a script rotating names: a fresh sender each time
+            _as(client, code, f"bot-{n}").post(
+                do, data={"type": "react", "kind": "fire", "count": 10}
+            )
+        client.post(do, data={"type": "volume", "value": 0.5})  # NOTIFYs keep order
+        fire = 0
+        while (cmd := screen.receive_json())["action"] == "react":
+            fire += cmd["count"]
+        assert cmd["action"] == "volume"
+    assert fire == ROOM_EMOJI_BURST
 
 
 def test_pushed_fragments_are_personal_and_escaped(client: TestClient) -> None:

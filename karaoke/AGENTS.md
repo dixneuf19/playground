@@ -35,12 +35,15 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   uploader shown least recently; never-shown uploaders first; ties by upload order.
   One photo at a time, 10 s, tilted instant-photo print with washi tape; rotating
   corners during a song, centred between songs.
-- **Reactions** (`reactions.py`, Scène tab): a fixed palette of 8 emoji that float
-  up the TV, plus two effects (🎉 confetti, 💖 falling hearts). Anonymous, like
-  photos. Spamming is part of the fun: the phone groups quick taps (≤10 per
-  message every 250 ms), the server throttles each sender (token bucket, 8/s,
-  burst 30, an effect costs 5) and the screen caps live particles (80 emoji,
-  200 with effects).
+- **Reactions** (`reactions.py`, under the player in the queue tab, outside the
+  pushed fragments): a fixed palette of 8 emoji that float up the TV, plus two
+  effects (🎉 confetti, 💖 falling hearts). Anonymous, like photos, but they need
+  a name (one throttle per name). Spamming is part of the fun: the phone groups
+  quick taps (≤10 per message every 250 ms); per replica, the server throttles
+  each sender (token bucket, 8/s, burst 30, an effect costs 5) and each room
+  whoever sends (emoji 40/s burst 80, effects 2/s burst 4), so rotating names
+  can't flood the NOTIFYs; the screen caps live particles (80 emoji, 200 with
+  effects).
 - **Resume after a screen reload**: the screen reports its position every 5 s; a
   reloaded screen resumes mid-song with a 3 s rewind and skips the "Au tour de…"
   interstitial (6 s, only for fresh songs).
