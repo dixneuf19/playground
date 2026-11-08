@@ -52,6 +52,11 @@
       "matchCurrentValue": "/^python\\d+\\.\\d+-/",
       "matchUpdateTypes": ["major", "minor"],
       "automerge": false
+    },
+    {
+      "description": "One PR moves deno in the karaoke image and its CI, so the lint runs on the image's version",
+      "matchDepNames": ["denoland/deno"],
+      "groupName": "deno runtime"
     }
   ]
 }
