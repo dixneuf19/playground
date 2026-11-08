@@ -88,7 +88,7 @@ def render_guest_state(
     )
 
 
-def render_heart(code: str, video_id: str, title: str, on: bool) -> str:
+def render_heart(code: str, video_id: str, title: str, artist: str, on: bool) -> str:
     """One ❤️ button, after a tap."""
     macros = cast(Any, env.get_template("_song.html").module)
-    return str(macros.heart(code, video_id, title, on))
+    return str(macros.heart(code, video_id, title, artist, on))

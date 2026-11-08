@@ -48,7 +48,7 @@ hx-post="{{ do }}" hx-vals='{{ vals|tojson }}' hx-swap="none"
   <p class="waiting muted">Rien ne joue : les chansons de la file n'ont pas pu être téléchargées.</p>
   {% endif %}
   {% elif c %}
-  <div class="row">{{ now_meta() }}{{ song.heart(room.code, c.video_id, c.title, c.video_id in hearted) }}</div>
+  <div class="row">{{ now_meta() }}{{ song.heart(room.code, c.video_id, c.title, c.artist, c.video_id in hearted) }}</div>
   <div class="controls">
     <button class="ctl" aria-label="Recommencer" {{ action({"type": "restart"}) }}>⟲</button>
     <button class="ctl main" aria-label="{{ 'Lecture' if paused else 'Pause' }}"
@@ -104,7 +104,7 @@ hx-post="{{ do }}" hx-vals='{{ vals|tojson }}' hx-swap="none"
         <div class="bar"><i style="width:{{ (i.progress * 100)|round|int }}%"></i></div>
         {% endif %}
       </div>
-      {{ song.heart(room.code, i.video_id, i.title, i.video_id in hearted) }}
+      {{ song.heart(room.code, i.video_id, i.title, i.artist, i.video_id in hearted) }}
       {% if mine %}
       <button class="x" aria-label="Retirer" {{ action({"type": "remove", "item_id": i.id}) }}>✕</button>
       {% else %}

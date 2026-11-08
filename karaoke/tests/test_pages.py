@@ -194,6 +194,15 @@ def _youtube(client: TestClient) -> None:
     setattr(services(client).searcher, "_search", fake)  # noqa: B010
 
 
+def _check_titles(client: TestClient) -> None:
+    """One pass of the leader's check of new favourites' titles."""
+    svc = services(client)
+    svc.worker.check_titles = True
+    portal = client.portal
+    assert portal is not None
+    portal.call(svc.worker.check_favourites)
+
+
 def test_favourites_are_shared_by_every_room(client: TestClient) -> None:
     _youtube(client)
     first, second = _room(client), _room(client)
@@ -203,18 +212,21 @@ def test_favourites_are_shared_by_every_room(client: TestClient) -> None:
     assert 'class="favourites hidden"' in page  # nothing hearted yet
     with client.websocket_connect(f"/ws/{second}?view=html") as tom:
         tom.receive_text()
-        # Léa hearts a song in the first room; the title comes from YouTube
+        # Léa hearts a song in the first room: saved at once, phone's title
         res = lea.post(
             f"/r/{first}/heart",
-            data={"type": "heart", "video_id": VID, "title": "Forged", "on": "true"},
+            data={"type": "heart", "video_id": VID, "title": "Phone", "on": "true"},
         )
         assert res.status_code == 200
         assert 'aria-pressed="true"' in res.text  # the button, now on
         assert "Retirer des favoris ?" in res.text  # removing asks first
         # Tom's phone, in the other room, gets the list by push
         pushed = tom.receive_text()
-        assert f'id="fav-{VID}"' in pushed and "Singer" in pushed
-        assert "Forged" not in pushed
+        assert f'id="fav-{VID}"' in pushed and "Phone" in pushed
+        # The leader checks it with YouTube: its title replaces the phone's
+        _check_titles(client)
+        pushed = tom.receive_text()
+        assert "Singer" in pushed and "Phone" not in pushed
         # A plain room push leaves the (heavy) list out
         client.post(f"/r/{second}/do", data={"type": "add", "video_id": VID})
         pushed = tom.receive_text()
@@ -225,14 +237,26 @@ def test_favourites_are_shared_by_every_room(client: TestClient) -> None:
     )
     assert 'aria-pressed="false"' in res.text
     assert f'id="fav-{VID}"' not in client.get(f"/r/{first}").text
-    unknown = {"type": "heart", "video_id": "zzzzzzzzzzz", "on": "true"}
-    res = client.post(f"/r/{first}/heart", data=unknown)
-    assert res.status_code == 409 and "introuvable" in res.text
     bad = {"type": "heart", "video_id": "../x", "on": "true"}
     assert client.post(f"/r/{first}/heart", data=bad).status_code == 422
     skip = {"type": "skip"}
     assert client.post(f"/r/{first}/heart", data=skip).status_code == 422
     assert client.post("/r/ZZZZ/heart", data=bad).status_code == 404
+
+
+def test_a_favourite_youtube_does_not_know_is_dropped(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _youtube(client)
+    monkeypatch.setattr(db, "RECHECK_SECONDS", 0)  # retry at once
+    code = _room(client)
+    fake = {"type": "heart", "video_id": "zzzzzzzzzzz", "title": "Fake", "on": 1}
+    assert client.post(f"/r/{code}/heart", data=fake).status_code == 200
+    for _ in range(db.MAX_FAILED_CHECKS - 1):
+        _check_titles(client)
+        assert 'id="fav-zzzzzzzzzzz"' in client.get(f"/r/{code}").text
+    _check_titles(client)
+    assert 'id="fav-zzzzzzzzzzz"' not in client.get(f"/r/{code}").text
 
 
 def test_queued_songs_and_results_show_their_heart(client: TestClient) -> None:

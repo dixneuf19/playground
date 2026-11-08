@@ -16,9 +16,11 @@ from typing import Any
 import asyncpg
 
 from karaoke.favourites import (
+    MAX_FAILED_CHECKS,
     MAX_FAVOURITES,
     MAX_SHOWN,
     NON_FAVOURITE_SHARE,
+    RECHECK_SECONDS,
     Favourite,
 )
 from karaoke.messages import MAX_NAME
@@ -128,6 +130,14 @@ MIGRATIONS: list[str] = [
         thumbnail  text NOT NULL DEFAULT '',
         created_at timestamptz NOT NULL DEFAULT now()
     );
+    """,
+    # 6: favourites keep the phone's title until the leader checks it with
+    # YouTube. Rows from before were looked up already: verified.
+    """
+    ALTER TABLE favourites
+        ADD COLUMN IF NOT EXISTS verified boolean NOT NULL DEFAULT true,
+        ADD COLUMN IF NOT EXISTS failed_checks int NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS checked_at timestamptz;
     """,
 ]
 
@@ -609,14 +619,17 @@ class Store:
         self, video_id: str, on: bool, title: str = "", artist: str = ""
     ) -> bool:
         """Heart or unheart a song for every room. False when the list is
-        full; hearting a song twice keeps its first title. Every replica
-        pushes the new list to its phones. The cap is a soft one: concurrent
-        hearts may each see room for one more and go a little past it."""
+        full; hearting a song twice keeps its first title. The title comes
+        from the phone: the leader checks it with YouTube later
+        (`favourites_to_check`). Every replica pushes the new list to its
+        phones. The cap is a soft one: concurrent hearts may each see room
+        for one more and go a little past it."""
         async with self.pool.acquire() as conn, conn.transaction():
             if on:
                 status = await conn.execute(
-                    """INSERT INTO favourites (video_id, title, artist, thumbnail)
-                       SELECT $1, $2, $3, $4
+                    """INSERT INTO favourites
+                           (video_id, title, artist, thumbnail, verified)
+                       SELECT $1, $2, $3, $4, false
                        WHERE (SELECT count(*) FROM favourites) < $5
                        ON CONFLICT (video_id) DO NOTHING""",
                     video_id,
@@ -636,6 +649,56 @@ class Store:
                 video_id,
             )
             return hearted == on
+
+    async def favourites_to_check(self, limit: int) -> list[str]:
+        """Favourites still showing the phone's title, oldest first; one whose
+        check failed waits a while before the next try."""
+        rows = await self.pool.fetch(
+            """SELECT video_id FROM favourites
+               WHERE NOT verified AND (checked_at IS NULL
+                     OR checked_at < now() - make_interval(secs => $2))
+               ORDER BY created_at LIMIT $1""",
+            limit,
+            RECHECK_SECONDS,
+        )
+        return [r["video_id"] for r in rows]
+
+    async def verify_favourite(self, video_id: str, title: str, artist: str) -> None:
+        """YouTube's title replaces the phone's; phones get it if it changed."""
+        async with self.pool.acquire() as conn, conn.transaction():
+            old = await conn.fetchrow(
+                """SELECT title, artist FROM favourites
+                   WHERE video_id = $1 AND NOT verified FOR UPDATE""",
+                video_id,
+            )
+            if old is None:  # unhearted meanwhile, or checked already
+                return
+            await conn.execute(
+                """UPDATE favourites SET title = $2, artist = $3, verified = true
+                   WHERE video_id = $1""",
+                video_id,
+                title,
+                artist,
+            )
+            if (old["title"], old["artist"]) != (title, artist):
+                await self._notify(conn, {"favourites": True})
+
+    async def favourite_check_failed(self, video_id: str) -> None:
+        """YouTube didn't answer for it: try again later, and drop it after a
+        few failures (a made-up video id never resolves)."""
+        async with self.pool.acquire() as conn, conn.transaction():
+            failed = await conn.fetchval(
+                """UPDATE favourites
+                   SET failed_checks = failed_checks + 1, checked_at = now()
+                   WHERE video_id = $1 AND NOT verified
+                   RETURNING failed_checks""",
+                video_id,
+            )
+            if failed is not None and failed >= MAX_FAILED_CHECKS:
+                await conn.execute(
+                    "DELETE FROM favourites WHERE video_id = $1", video_id
+                )
+                await self._notify(conn, {"favourites": True})
 
     async def favourites(self, limit: int = MAX_SHOWN) -> list[Favourite]:
         """Latest hearted first."""

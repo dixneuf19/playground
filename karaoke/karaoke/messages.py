@@ -82,12 +82,15 @@ class Retry(Message):
 
 
 class Heart(Message):
-    """Add a song to the shared favourites (`on`), or take it out. Its title
-    and artist come from YouTube, not from the phone: every room shows them."""
+    """Add a song to the shared favourites (`on`), or take it out. Title and
+    artist come from the phone and are shown at once; the leader replaces
+    them with YouTube's (karaoke.favourites)."""
 
     type: Literal["heart"]
     video_id: VideoId
     on: bool
+    title: Text = ""
+    artist: Text = ""
 
 
 class PhotoSkip(Message):

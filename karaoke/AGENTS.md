@@ -26,9 +26,12 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   `favourites`): anyone hearts a song from the search results, the queue or the
   player, and anyone may take a heart out (it asks first, since it's everyone's
   list). The search tab lists the latest 50 before a search, above the popular songs. 500 stored at
-  most (a soft cap). Title and artist come from YouTube (`Searcher.describe`:
-  a recent search, else a lookup of the id), never from the phone, since every
-  room shows them. Other videos are evicted from the cache past 80% of
+  most (a soft cap). Trust, then verify: a heart is saved at once with the
+  phone's title and artist (no YouTube call while the phone waits), then the
+  leader's `check_favourites` (every 5 s, 3 at a time) replaces them with
+  YouTube's (`Searcher.describe`: a recent search, else a lookup of the id)
+  and pushes the change. A video YouTube doesn't answer for is retried after
+  10 min and dropped after 3 failures. Other videos are evicted from the cache past 80% of
   `KARAOKE_CACHE_MAX_GB`, favourites only past all of it.
 - **The screen doesn't show who sent a photo** (a product choice, not a security
   property). A guest is known by the name their phone holds in the room: the
@@ -87,7 +90,7 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
 | `actions.py` | `Actions.handle`: applies a message to a room inside `room_tx` (a `match` on the message class). |
 | `db.py` | `Store`: Postgres via asyncpg. `MIGRATIONS`, `room_tx`, `load_room`, videos/photos/plays tables, NOTIFY. |
 | `hub.py` | This replica's sockets (`Client`), the LISTEN connection and the per-room push loop. |
-| `worker.py` | Leader-only background work: downloads, photo rotation, repair, pruning. Owns the `Leadership`. |
+| `worker.py` | Leader-only background work: downloads, photo rotation, repair, pruning, checking new favourites' titles. Owns the `Leadership`. |
 | `leader.py` | Leader election with a Postgres advisory lock held on a dedicated connection. |
 | `api.py` | JSON API, photo upload, media files, the `/ws/{code}` WebSocket. |
 | `pages.py`, `views.py` | HTML pages (Jinja) and the htmx endpoints of the phone page. |
@@ -159,7 +162,8 @@ Prod runs 2 replicas. Everything a replica knows lives in Postgres or on the sha
    every push carries which of the room's songs are hearted.
 3. **One leader runs the background work** (`leader.py`). Every replica serves
    pages and phone actions; the leader also runs photo rotation (0.5 s), the
-   download loop, a repair pass (15 s) and pruning (10 min). Leadership is a
+   download loop, a repair pass (15 s), the favourites' title check (5 s) and
+   pruning (10 min). Leadership is a
    session-level `pg_try_advisory_lock` on a connection of its own: when the pod
    stops or dies the connection closes and Postgres releases the lock; followers
    retry every 5 s (TCP keepalives on that connection catch a vanished node in
