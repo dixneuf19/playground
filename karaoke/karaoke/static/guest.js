@@ -1,5 +1,5 @@
 // Phone page. The server renders everything (karaoke/templates) and keeps it up
-// to date over the WebSocket (htmx ws extension, fragments morphed by id).
+// to date over the WebSocket (htmx 4 + hx-ws, fragments morphed in by id).
 // What's left here is what only the browser can do: tabs, the name cookie,
 // confirmation sheets, toasts, drag and drop, resizing photos before upload.
 const $ = (id) => document.getElementById(id);
@@ -9,10 +9,6 @@ const CODE = document.body.dataset.code;
 const NAME_COOKIE = `karaoke_name_${CODE}`;
 const LAST_NAME_COOKIE = "karaoke_name";
 const ROOM_COOKIE_AGE = 2 * 24 * 3600; // rooms expire after a day
-
-// A push never fights a finger on the volume slider.
-Idiomorph.defaults.callbacks.beforeNodeMorphed = (old) =>
-  !(old.id === "volume" && old === document.activeElement);
 
 // --- name -------------------------------------------------------------------
 function cookieName() {
@@ -47,7 +43,7 @@ function show(view) {
   // Leaving the search tab brings the next search back to the catalogue.
   if (view !== "search" && $("everywhere").value === "1") {
     $("everywhere").value = "0";
-    if ($("q").value.trim()) htmx.trigger("#search-form", "submit");
+    if ($("q").value.trim()) $("search-form").requestSubmit();
   }
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
@@ -81,39 +77,45 @@ function confirmSheet(title, text, yes = "Oui") {
     $("confirm-no").onclick = () => done(false);
   });
 }
+// Adding a song needs a name: it shows on the big screen. Checked before the
+// confirmation sheet, which would be pointless without one.
+document.addEventListener("htmx:config:request", (e) => {
+  if (e.detail.ctx.sourceElement.matches("[data-added]") && !cookieName()) {
+    e.preventDefault();
+    askName();
+  }
+});
 // hx-confirm opens our sheet instead of the browser's dialog.
 document.addEventListener("htmx:confirm", (e) => {
-  const el = e.detail.elt;
-  if (!el.hasAttribute("hx-confirm")) return;
+  const el = e.detail.ctx.sourceElement;
   e.preventDefault();
-  confirmSheet(el.dataset.confirmTitle || "Sûr ?", e.detail.question, el.dataset.confirmYes).then((ok) => {
-    if (ok) e.detail.issueRequest(true);
+  confirmSheet(el.dataset.confirmTitle || "Sûr ?", e.detail.ctx.confirm, el.dataset.confirmYes).then((ok) => {
+    if (ok) e.detail.issueRequest();
+    else e.detail.dropRequest();
   });
 });
 
-document.addEventListener("htmx:beforeRequest", (e) => {
-  const el = e.detail.elt;
-  // Adding a song needs a name: it shows on the big screen.
-  if (el.matches("[data-added]") && !cookieName()) { e.preventDefault(); askName(); return; }
-  if (el.id === "search-form" || e.detail.target?.id === "results") {
-    if (!$("q").value.trim()) return;
+document.addEventListener("htmx:before:request", (e) => {
+  // A search (the form, or the catalogue/YouTube buttons in the results)
+  if (e.detail.ctx.sourceElement.matches("#search-form, #results [hx-get]") && $("q").value.trim()) {
     $("results").innerHTML = '<div class="skeleton"></div>'.repeat(5);
   }
 });
-document.addEventListener("htmx:afterRequest", (e) => {
-  const el = e.detail.elt;
-  if (el.matches("[data-added]") && e.detail.successful) { el.classList.add("done"); el.textContent = "✓"; }
+document.addEventListener("htmx:after:request", (e) => {
+  const { sourceElement: el, response } = e.detail.ctx;
+  if (el.matches("[data-added]") && response.status < 400) { el.classList.add("done"); el.textContent = "✓"; }
 });
-document.addEventListener("htmx:responseError", (e) => {
+// Errors are not swapped (noSwap in the htmx-config meta): show the message.
+document.addEventListener("htmx:response:error", (e) => {
   let detail = "";
-  try { detail = JSON.parse(e.detail.xhr.responseText).detail; } catch {}
+  try { detail = JSON.parse(e.detail.ctx.text).detail; } catch {}
   toast(typeof detail === "string" && detail ? detail : "Oups, ça n'a pas marché");
 });
-document.addEventListener("htmx:sendError", () => toast("Pas de réseau ?"));
+document.addEventListener("htmx:error", () => toast("Pas de réseau ?"));
 
 // --- search -----------------------------------------------------------------
 $("q").addEventListener("input", () => {
-  if (!$("q").value.trim()) { $("everywhere").value = "0"; htmx.trigger("#search-form", "submit"); }
+  if (!$("q").value.trim()) { $("everywhere").value = "0"; $("search-form").requestSubmit(); }
 });
 $("search-form").addEventListener("submit", () => $("q").blur());
 document.addEventListener("click", async (e) => {
@@ -122,21 +124,23 @@ document.addEventListener("click", async (e) => {
   try { text = (await navigator.clipboard.readText()).trim(); } catch {}
   if (!text) { $("q").focus(); toast("Colle le lien dans la barre de recherche"); return; }
   $("q").value = text;
-  htmx.trigger("#search-form", "submit");
+  $("search-form").requestSubmit();
 });
 
 // --- live connection ---------------------------------------------------------
-document.body.addEventListener("htmx:wsOpen", () => document.body.classList.remove("offline"));
-document.body.addEventListener("htmx:wsClose", (e) => {
-  if (e.detail.event.code === 4404) { location.href = "/"; return; } // room gone
-  document.body.classList.add("offline");
+// hx-ws reconnects by itself (closes 1001/1005/1006/1011-1014), and pauses
+// the socket while the phone's screen is off.
+document.addEventListener("htmx:ws:after:connection", () => document.body.classList.remove("offline"));
+document.addEventListener("htmx:ws:close", (e) => {
+  if (e.detail.code === 4404) { location.href = "/"; return; } // room gone
+  if (!document.hidden) document.body.classList.add("offline");
 });
 
 // --- queue: drag and drop ---------------------------------------------------
 // A push while a finger drags would yank the list: hold it, then catch up.
 let dragging = false;
 let missedPush = false;
-document.body.addEventListener("htmx:wsBeforeMessage", (e) => {
+document.addEventListener("htmx:ws:before:message:incoming", (e) => {
   if (dragging) { missedPush = true; e.preventDefault(); }
 });
 function refresh() {

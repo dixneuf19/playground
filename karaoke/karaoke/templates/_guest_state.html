@@ -5,7 +5,7 @@
   drags survive). Every action posts to /r/<code>/do; the new state comes back
   by push. Import "with context": the macros read room, me and oob.
 #}
-{% set o = 'hx-swap-oob="morph"'|safe if oob else '' %}
+{% set o = 'hx-swap-oob="outerMorph"'|safe if oob else '' %}
 {% set do = "/r/" ~ room.code ~ "/do" %}
 {% set c = room.current %}
 {% set paused = room.state == "paused" %}

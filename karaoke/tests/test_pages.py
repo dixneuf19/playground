@@ -28,7 +28,7 @@ def test_page_asks_for_a_name_until_it_has_one(client: TestClient) -> None:
     page = _as(client, code, "Léa").get(f"/r/{code}").text
     assert 'class="sheet hidden" id="name-sheet"' in page
     assert "🎤 <span>Léa</span>" in page
-    assert f'ws-connect="/ws/{code}?role=guest&view=html"' in page
+    assert f'hx-ws:connect="/ws/{code}?role=guest&view=html"' in page
     assert page.count('id="everywhere"') == 1
 
 
@@ -94,7 +94,7 @@ def test_pushed_fragments_are_personal_and_escaped(client: TestClient) -> None:
     _as(client, code, "Léa")
     with client.websocket_connect(f"/ws/{code}?view=html") as lea:
         first = lea.receive_text()
-        assert 'id="queue-panel" hx-swap-oob="morph"' in first
+        assert 'id="queue-panel" hx-swap-oob="outerMorph"' in first
         client.post(
             f"/r/{code}/do",
             data={"type": "add", "video_id": VID, "title": "<script>x</script>"},
