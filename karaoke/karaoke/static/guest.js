@@ -191,8 +191,6 @@ function flushReactions() {
 document.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-react]");
   if (!btn) return;
-  // Reactions need a name, like adding a song.
-  if (!myName()) { askName(); return; }
   const kind = btn.dataset.react;
   reacting.set(kind, (reacting.get(kind) || 0) + 1);
   reactTimer ??= setTimeout(flushReactions, REACT_EVERY);
