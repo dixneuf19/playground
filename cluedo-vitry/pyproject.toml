@@ -1,11 +1,15 @@
 [project]
-name = "melody-thoughts-blog"
+name = "cluedo-vitry"
 version = "1.0.0"
-description = "A music blog website for role-playing games"
-authors = [{ name = "Role-Playing Game Creator" }]
+description = "Sam Marsalis's music blog, a prop website for the Vitry murder party"
+authors = [
+    { name = "Julen Dixneuf", email = "julen@loudnaround.org" }
+]
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = "==3.14.*"
 dependencies = []
 
-[tool.uv]
-dev-dependencies = []
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]

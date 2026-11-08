@@ -31,7 +31,7 @@ echo -n "votre-nouveau-mot-de-passe" | base64
 Si vous utilisez un tag différent, modifiez `deployment.yaml` :
 
 ```yaml
-image: ghcr.io/dixneuf19/cluedo-vitry-website:your-tag
+image: ghcr.io/dixneuf19/cluedo-vitry:your-tag
 ```
 
 ## Déploiement
@@ -72,7 +72,7 @@ Pour mettre à jour l'application avec une nouvelle image :
 
 ```bash
 # Directement avec kubectl
-kubectl set image deployment/cluedo-vitry blog=ghcr.io/dixneuf19/cluedo-vitry-website:new-tag -n cluedo-vitry
+kubectl set image deployment/cluedo-vitry blog=ghcr.io/dixneuf19/cluedo-vitry:new-tag -n cluedo-vitry
 ```
 
 ## Suppression
