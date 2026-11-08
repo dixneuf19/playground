@@ -1,0 +1,20 @@
+Ce dossier contient les images de substitution pour le blog de Sam Marsalis.
+
+Pour la démo, vous aurez besoin de ces images stock :
+- brass-band.jpg (fanfare de rue)
+- concert-stage.jpg (concert en live)
+- band-members.jpg (les membres du groupe)
+- donation.jpg (soutien musical)
+- trumpet-close.jpg (trompette en gros plan)
+
+Vous pouvez les remplacer par des photos stock appropriées depuis des sites comme :
+- Unsplash.com
+- Pexels.com
+- Pixabay.com
+
+Termes de recherche à utiliser :
+- "brass band street music"
+- "live concert stage performance"
+- "musicians band group"
+- "music support donation"
+- "trumpet close up instrument" 

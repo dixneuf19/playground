@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluedo-vitry-config
+  namespace: cluedo-vitry
+  labels:
+    app.kubernetes.io/name: cluedo-vitry
+    app.kubernetes.io/component: config
+data:
+  # Server configuration
+  PORT: "8000"
+  # Add any other non-sensitive configuration here
