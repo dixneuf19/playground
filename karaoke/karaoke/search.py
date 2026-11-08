@@ -6,6 +6,7 @@ import logging
 import re
 import time
 import unicodedata
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, replace
 from typing import Any
@@ -18,23 +19,54 @@ logger = logging.getLogger(__name__)
 CHANNEL_RESULTS = 20
 YOUTUBE_RESULTS = 12
 
-# Title formats of the curated channels, each with named song/artist groups.
-_FORMATS = [
-    re.compile(p, re.I)
-    for p in (
-        # @karafun: "Song - Artist | Karaoke Version | KaraFun"
-        r"^(?P<song>.+) - (?P<artist>.+?)\s*\|\s*karaoke version\s*\|\s*karafun$",
-        # @karafunfr: "Karaoké Song - Artist *"
-        r"^\s*karaok[eé]\s+(?P<song>.+) - (?P<artist>.+?)[\s*]*$",
-        # @bdfabkaraoke9959: "Artist - Song (chœurs) (2013) [BDFab karaoke]"
-        r"^(?P<artist>.+?) - (?P<song>.+?)(?:\s*\(ch(?:œ|oe)urs\))?"
-        r"(?:\s*\(\d{4}\))?\s*\[bdfab karaoke\]$",
-        # @singkingkaraoke and most labels: "Artist - Song (Karaoke Version)"
-        r"^(?P<artist>.+?) - (?P<song>.+?)\s*\(karaoke version\)$",
-        # Its variants, kept in the song: "Artist - Song (Piano Karaoke)"
-        r"^(?P<artist>.+?) - (?P<song>.+\([^()]*\bkaraoke\b[^()]*\))$",
-    )
-]
+
+@dataclass(frozen=True)
+class Channel:
+    handle: str  # youtube.com/@<handle>
+    # Its title formats, with named song/artist groups.
+    formats: tuple[re.Pattern[str], ...]
+
+
+def _formats(*patterns: str) -> tuple[re.Pattern[str], ...]:
+    return tuple(re.compile(p, re.I) for p in patterns)
+
+
+# The curated channels, searched in parallel, in priority order: when several
+# have the same song, or two results score the same, the earlier channel wins.
+CHANNELS = (
+    Channel(
+        "karafunfr",
+        # "Karaoké Song - Artist *"
+        _formats(r"^\s*karaok[eé]\s+(?P<song>.+) - (?P<artist>[^|]+?)[\s*]*$"),
+    ),
+    Channel(
+        "karafun",
+        # "Song - Artist | Karaoke Version | KaraFun"
+        _formats(
+            r"^(?P<song>.+) - (?P<artist>.+?)\s*\|\s*karaoke version\s*\|\s*karafun$"
+        ),
+    ),
+    # French songs missing from KaraFun's YouTube catalogue.
+    Channel(
+        "bdfabkaraoke9959",
+        # "Artist - Song (chœurs) (2013) [BDFab karaoke]"
+        _formats(
+            r"^(?P<artist>.+?) - (?P<song>.+?)(?:\s*\(ch(?:œ|oe)urs\))?"
+            r"(?:\s*\(\d{4}\))?\s*\[bdfab karaoke\]$"
+        ),
+    ),
+    # English songs missing from KaraFun's YouTube catalogue.
+    Channel(
+        "singkingkaraoke",
+        _formats(
+            # "Artist - Song (Karaoke Version)", like most labels
+            r"^(?P<artist>.+?) - (?P<song>.+?)\s*\(karaoke version\)$",
+            # Variants, kept in the song: "Artist - Song (Piano Karaoke)"
+            r"^(?P<artist>.+?) - (?P<song>.+\([^()]*\bkaraoke\b[^()]*\))$",
+        ),
+    ),
+)
+CHANNEL_HANDLES = tuple(c.handle for c in CHANNELS)
 
 
 @dataclass
@@ -54,7 +86,7 @@ class SearchResult:
 
 def parse_title(raw: str) -> tuple[str, str] | None:
     """(song, artist) when the title is in a curated channel's format."""
-    for fmt in _FORMATS:
+    for fmt in (f for c in CHANNELS for f in c.formats):
         if m := fmt.match(raw.strip()):
             return m["song"].strip(), m["artist"].strip()
     return None
@@ -114,7 +146,7 @@ def video_id_from_url(text: str) -> str | None:
 
 def rank(query: str, results: list[SearchResult]) -> list[SearchResult]:
     """Best match first. A song several channels have keeps the video of the
-    first channel in `results` order (KARAOKE_CHANNELS order)."""
+    first channel in `results` order (CHANNELS order)."""
     seen: set[str | tuple[str, str]] = set()
     unique = []
     for r in results:
@@ -157,7 +189,7 @@ def _extract(url: str, limit: int) -> list[dict[str, Any]]:
     return [e for e in (info or {}).get("entries") or [] if e]
 
 
-def search_channels(query: str, channels: list[str]) -> list[SearchResult]:
+def search_channels(query: str, channels: Sequence[str]) -> list[SearchResult]:
     def one(handle: str) -> list[SearchResult]:
         url = f"https://www.youtube.com/@{handle}/search?query={quote(query)}"
         try:
@@ -223,7 +255,7 @@ class Searcher:
     """yt-dlp searches, a few at a time per replica and cached for a while:
     hammering YouTube from the home IP could get downloads blocked."""
 
-    def __init__(self, channels: list[str]) -> None:
+    def __init__(self, channels: Sequence[str] = CHANNEL_HANDLES) -> None:
         self.channels = channels
         self._slots = asyncio.Semaphore(MAX_CONCURRENT_SEARCHES)
         self._cache: dict[tuple[str, str], tuple[float, list[SearchResult]]] = {}

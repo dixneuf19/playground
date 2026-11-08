@@ -14,13 +14,14 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   queue, reorder (drag and drop), pause/skip/restart/volume and send photos.
   Anyone in the room may control anything: it's a party.
 - **Curated search first.** The default search runs only on curated YouTube
-  karaoke channels (`KARAOKE_CHANNELS`, default
-  `karafunfr,karafun,bdfabkaraoke9959,singkingkaraoke`: KaraFun's YouTube
-  catalogue misses many French songs, BDFab fills them, Sing King the English
-  ones), in parallel, keeps only titles saying "karaoke", then re-ranks them
-  (`search.rank`: word overlap + fuzzy ratio). Each channel orders its titles
-  its own way: `search.parse_title` knows their formats, so a new channel
-  needs one there (and a test). Searching all of YouTube
+  karaoke channels (`search.CHANNELS`, in code, in priority order: KaraFun
+  France, KaraFun, then BDFab and Sing King for the French and English songs
+  missing from KaraFun's YouTube catalogue), in parallel. It keeps only titles
+  saying "karaoke" (not "guide vocal"), then re-ranks them (`search.rank`:
+  word overlap + fuzzy ratio); a song several channels have, or a score tie,
+  goes to the higher-priority channel. Each channel orders its titles its own
+  way, so a `Channel` carries its title formats (`search.parse_title`): a new
+  channel needs its formats and a test. Searching all of YouTube
   needs an explicit tap and appends " karaoke" to the query. A pasted YouTube link
   resolves that one video; the search placeholder says so, and the intro has no
   paste button (owner's choice). `strong: false` (no result has every query word) makes
@@ -295,7 +296,7 @@ uv run pytest -m integration -v   # real YouTube search + download (slow, networ
 ```
 
 Env: `KARAOKE_DATABASE_URL` or `KARAOKE_DB_USER/PASSWORD/HOST/PORT/NAME`,
-`KARAOKE_DATA_DIR`, `KARAOKE_PUBLIC_URL` (QR base URL), `KARAOKE_CHANNELS`,
+`KARAOKE_DATA_DIR`, `KARAOKE_PUBLIC_URL` (QR base URL),
 `KARAOKE_CACHE_MAX_GB`, `KARAOKE_MAX_HEIGHT`, `KARAOKE_HOST_PASSWORD` (empty =
 anyone can create a room), `PORT`, `LOG_LEVEL`.
 

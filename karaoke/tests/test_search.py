@@ -29,6 +29,10 @@ from karaoke.search import (
             ("Je vais t'aimer", "Michel Sardou"),
         ),
         ("Karaoké Le sud (Live) - Les Enfoirés *", ("Le sud (Live)", "Les Enfoirés")),
+        (  # @karafun, not @karafunfr, despite the leading "Karaoke"
+            "Karaoke Heaven - The Band | Karaoke Version | KaraFun",
+            ("Karaoke Heaven", "The Band"),
+        ),
         (
             "Michel Sardou - Les lacs du Connemara (chœurs) (1981) [BDFab karaoke]",
             ("Les lacs du Connemara", "Michel Sardou"),

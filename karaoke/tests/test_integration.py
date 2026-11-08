@@ -4,14 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from karaoke.config import Settings
 from karaoke.library import Library
-from karaoke.search import search_channels
+from karaoke.search import CHANNEL_HANDLES, search_channels
 
 
 @pytest.mark.integration
 def test_search_finds_french_catalogue() -> None:
-    results = search_channels("renaud manhattan kaboul", Settings().channels)
+    results = search_channels("renaud manhattan kaboul", CHANNEL_HANDLES)
     assert results
     assert results[0].title == "Manhattan-Kaboul"
     assert results[0].artist == "Renaud"
