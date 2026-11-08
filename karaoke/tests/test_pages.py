@@ -501,6 +501,7 @@ def test_search_renders_results(client: TestClient) -> None:
                 duration=245,
                 thumbnail="t",
                 curated=not everywhere,
+                channel_label="" if everywhere else "KaraFun FR",
             )
         ]
 
@@ -513,6 +514,7 @@ def test_search_renders_results(client: TestClient) -> None:
     )
     assert "Catalogue karaoké" in html
     assert "4:05" in html
+    assert '<span class="src">·&nbsp;KaraFun FR</span>' in html
     assert 'data-confirm-yes="J\'assume"' in html  # cancelled: asks first
     assert 'name="everywhere" value="0"' in html
 
@@ -521,6 +523,7 @@ def test_search_renders_results(client: TestClient) -> None:
         f"/r/{code}/search", params={"q": "connemara", "everywhere": 1}
     ).text
     assert "Résultats YouTube" in html
+    assert "KaraFun FR" not in html
     assert 'name="everywhere" value="1"' in html
     assert "✓" in html  # already queued by Léa
     assert client.get("/r/ZZZZ/search", params={"q": "x"}).status_code == 404

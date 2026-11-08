@@ -16,9 +16,10 @@
 <p class="muted paste-hint">ou colle directement le lien de la vidéo 🔗</p>
 {% endmacro %}
 
-{% macro song_card(video_id, title, artist, thumbnail, curated=True, duration=None, plays=0, channel="") %}
+{% macro song_card(video_id, title, artist, thumbnail, curated=True, duration=None, plays=0, channel="", channel_label="") %}
 {{ song.card(code, video_id, title, artist, thumbnail, cancelled[video_id], video_id in cached,
-             video_id in added, video_id in hearted, curated, duration, plays, channel=channel) }}
+             video_id in added, video_id in hearted, curated, duration, plays, channel=channel,
+             channel_label=channel_label) }}
 {% endmacro %}
 
 {% if not page.query %}
@@ -47,7 +48,8 @@
 {% endif %}
 
 <div class="list">
-  {% for r in page.results %}{{ song_card(r.video_id, r.title, r.artist, r.thumbnail, r.curated, r.duration, channel=r.channel) }}{% endfor %}
+  {% for r in page.results %}{{ song_card(r.video_id, r.title, r.artist, r.thumbnail, r.curated, r.duration,
+                         channel=r.channel, channel_label=r.channel_label) }}{% endfor %}
 </div>
 
 {% if not page.results and page.strong %}

@@ -23,6 +23,7 @@ YOUTUBE_RESULTS = 12
 @dataclass(frozen=True)
 class Channel:
     handle: str  # youtube.com/@<handle>
+    label: str  # short name on the phone's result cards
     # Its title formats, with named song/artist groups.
     formats: tuple[re.Pattern[str], ...]
 
@@ -36,11 +37,13 @@ def _formats(*patterns: str) -> tuple[re.Pattern[str], ...]:
 CHANNELS = (
     Channel(
         "karafunfr",
+        "KaraFun FR",
         # "Karaoké Song - Artist *"
         _formats(r"^\s*karaok[eé]\s+(?P<song>.+) - (?P<artist>[^|]+?)[\s*]*$"),
     ),
     Channel(
         "karafun",
+        "KaraFun",
         # "Song - Artist | Karaoke Version | KaraFun"
         _formats(
             r"^(?P<song>.+) - (?P<artist>.+?)\s*\|\s*karaoke version\s*\|\s*karafun$"
@@ -49,6 +52,7 @@ CHANNELS = (
     # French songs missing from KaraFun's YouTube catalogue.
     Channel(
         "bdfabkaraoke9959",
+        "BDFab",
         # "Artist - Song (chœurs) (2013) [BDFab karaoke]"
         _formats(
             r"^(?P<artist>.+?) - (?P<song>.+?)(?:\s*\(ch(?:œ|oe)urs\))?"
@@ -58,6 +62,7 @@ CHANNELS = (
     # English songs missing from KaraFun's YouTube catalogue.
     Channel(
         "singkingkaraoke",
+        "Sing King",
         _formats(
             # "Artist - Song (Karaoke Version)", like most labels
             r"^(?P<artist>.+?) - (?P<song>.+?)\s*\(karaoke version\)$",
@@ -67,6 +72,7 @@ CHANNELS = (
     ),
 )
 CHANNEL_HANDLES = tuple(c.handle for c in CHANNELS)
+CHANNEL_LABELS = {c.handle: c.label for c in CHANNELS}
 
 
 @dataclass
@@ -79,6 +85,8 @@ class SearchResult:
     duration: int | None
     thumbnail: str
     curated: bool
+    # The curated channel's short name; YouTube results show `channel`.
+    channel_label: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -157,7 +165,9 @@ def rank(query: str, results: list[SearchResult]) -> list[SearchResult]:
     return sorted(unique, key=lambda r: score(query, r), reverse=True)
 
 
-def _to_result(entry: dict[str, Any], curated: bool) -> SearchResult | None:
+def _to_result(
+    entry: dict[str, Any], curated: bool, channel_label: str = ""
+) -> SearchResult | None:
     video_id = entry.get("id")
     raw = entry.get("title")
     if not video_id or not raw or entry.get("ie_key") not in (None, "Youtube"):
@@ -173,6 +183,7 @@ def _to_result(entry: dict[str, Any], curated: bool) -> SearchResult | None:
         duration=int(duration) if isinstance(duration, int | float) else None,
         thumbnail=f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg",
         curated=curated,
+        channel_label=channel_label,
     )
 
 
@@ -200,7 +211,8 @@ def search_channels(query: str, channels: Sequence[str]) -> list[SearchResult]:
         return [
             r
             for e in entries
-            if (r := _to_result(e, curated=True)) and is_karaoke(r.raw_title)
+            if (r := _to_result(e, True, CHANNEL_LABELS.get(handle, handle)))
+            and is_karaoke(r.raw_title)
         ]
 
     with ThreadPoolExecutor(max(len(channels), 1)) as pool:
