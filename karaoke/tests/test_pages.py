@@ -302,6 +302,75 @@ def test_only_the_uploader_sees_their_waiting_photos(client: TestClient) -> None
     assert waiting not in client.get(f"/r/{code}/state").text
 
 
+def _cancel_buttons(html: str) -> list[tuple[str, str, dict | None]]:
+    """Every 🚫 button: its classes, aria-label and the sheet's cancel data."""
+    found = []
+    for tag in re.findall(r"<button[^>]*\bdata-artist='[^']*'[^>]*>", html):
+        classes = re.search(r'\bclass="([^"]*)"', tag)
+        label = re.search(r'\baria-label="([^"]*)"', tag)
+        data = re.search(r"data-artist='([^']*)'", tag)
+        assert classes and label and data, tag
+        found.append(
+            (classes.group(1), label.group(1), json.loads(data.group(1))["cancel"])
+        )
+    return found
+
+
+def _cancel_button(html: str) -> tuple[str, str, dict | None]:
+    [button] = _cancel_buttons(html)
+    return button
+
+
+def test_the_cancel_chip_sits_under_the_title_in_the_queue_and_player(
+    client: TestClient,
+) -> None:
+    svc = services(client)
+    path = svc.library.path_for(VID)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"fake mp4")
+    portal = client.portal
+    assert portal is not None
+    portal.call(svc.store.video_status, VID)
+    portal.call(svc.store.finish_download, VID, True, "Connemara", 1)
+    code = _room(client)
+    claim(client, code, "Léa")
+    add = {
+        "type": "add",
+        "video_id": VID,
+        "title": "Connemara",
+        "artist": "Michel Sardou",
+    }
+    client.post(f"/r/{code}/do", data=add)  # ready: it plays at once
+    add = {
+        "type": "add",
+        "video_id": "bbbbbbbbbbb",
+        "title": "Mistral",
+        "artist": "Renaud",
+    }
+    client.post(f"/r/{code}/do", data=add)
+
+    state = client.get(f"/r/{code}/state").text
+    player, queue = state.split('id="queue-panel"')
+    player = player.split('id="player"')[1]
+    assert 'class="meta" data-artist' not in state
+    # Playing: Michel Sardou, cancelled from the start: the red "🚫 Cancel"
+    assert [(k, label) for k, label, _ in _cancel_buttons(player)] == [
+        ("cancel-chip on", "Voir le cancel")
+    ]
+    assert '<span class="tag tag-cancel">🚫 Cancel</span>' in player
+    assert re.search(r'<span class="tags"><button[^>]*class="cancel-chip', player)
+    # Queued: Renaud, not cancelled: a muted 🚫 alone, in the singer line
+    assert [(k, label) for k, label, _ in _cancel_buttons(queue)] == [
+        ("cancel-chip", "Cancel l&#39;artiste")
+    ]
+    assert '<span class="tag">🚫</span>' in queue
+    sub = queue.split('class="sub"')[1].split("</div>")[0]
+    assert "cancel-chip" in sub
+    # The mini player on the search tab is a button: no chip inside it
+    mini = state.split('id="now-mini"')[1].split("</button>")[0]
+    assert "cancel-chip" not in mini
+
+
 def test_anyone_cancels_and_uncancels_an_artist(client: TestClient) -> None:
     async def fake(_q: str, _everywhere: bool, _link: str | None) -> list[SearchResult]:
         return [
@@ -327,7 +396,9 @@ def test_anyone_cancels_and_uncancels_an_artist(client: TestClient) -> None:
 
     html = search()
     assert "J'assume" not in html
-    assert '"cancel": null' in html
+    # The card's body does nothing: the 🚫 button next to the ❤️ opens the sheet
+    assert 'class="meta" data-artist' not in html
+    assert _cancel_button(html) == ("cancel-chip", "Cancel l&#39;artiste", None)
 
     refused = client.post(
         f"/r/{code}/do", data={"type": "cancel_artist", "artist": "Indochine"}
@@ -353,7 +424,9 @@ def test_anyone_cancels_and_uncancels_an_artist(client: TestClient) -> None:
     html = search()
     assert 'data-confirm-yes="J\'assume"' in html
     assert "Indochine : Trop triste (cancel par Léa)." in html
-    assert '"by": "L\\u00e9a"' in html  # for the artist sheet
+    kind, label, cancel = _cancel_button(html)  # "on", like a ❤️
+    assert (kind, label) == ("cancel-chip on", "Voir le cancel")
+    assert cancel and cancel["by"] == "Léa"
 
     done = client.post(
         f"/r/{code}/do", data={"type": "uncancel_artist", "artist": "INDOCHINE"}
