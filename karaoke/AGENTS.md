@@ -60,15 +60,20 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
 | `config.py` | `Settings` from `KARAOKE_*` env vars. |
 | `app.py` | Wiring only: builds the services, includes the routers. |
 | `templates/` | `guest.html` (+ `_guest_state.html` fragments, `_guest_push.html`, `_results.html`), `display.html`, `index.html`. |
-| `static/` | `guest.js`/`guest.css`, `display.js`/`display.css`, `common.js` (screen socket + `esc`), `app.css`. htmx, its ws extension, idiomorph and SortableJS come from jsDelivr in `guest.html`, pinned with an integrity hash. No build step. |
+| `static/` | `guest.js`/`guest.css`, `display.js`/`display.css`, `common.js` (screen socket + `esc`), `app.css`. htmx 4 (+ its `hx-ws` extension) and SortableJS come from jsDelivr in `guest.html`, pinned with an integrity hash. No build step. |
+| `scripts/sri.py` | Recomputes (`make sri`) or checks (`make check-sri`, in CI) the integrity hashes of CDN scripts in the templates. |
 
 ## Frontend
 
-- **Phone page = htmx.** The server renders it with Jinja (autoescaped) for the
-  guest in the cookie. Each `_guest_state.html` macro renders one region with
-  an id; after every change the hub renders them all (`_guest_push.html`, once
-  per guest name) and pushes the HTML over the WebSocket (`?view=html`); htmx
-  swaps each by id with idiomorph, so scroll, focus and drags survive. Buttons
+- **Phone page = htmx 4** (not 2: events are `htmx:phase:action`, no `hx-ext`,
+  attributes don't inherit, morphing is built in; see the htmx upgrade guide).
+  The server renders it with Jinja (autoescaped) for the guest in the cookie.
+  Each `_guest_state.html` macro renders one region with an id; after every
+  change the hub renders them all (`_guest_push.html`, once per guest name)
+  and pushes the HTML over the WebSocket (`hx-ws:connect`, `?view=html`); each
+  element carries `hx-swap-oob="outerMorph"`, so scroll, focus and drags
+  survive. 4xx/5xx responses are not swapped (`noSwap` in the `htmx-config`
+  meta tag): `guest.js` shows their JSON `detail` as a toast. Buttons
   `hx-post` to `/r/{code}/do` (form fields = a `messages` model; `singer` and
   `uploader` always come from the cookie) and get the new state by push.
   `hx-confirm` opens the app's own sheet; toasts come from `HX-Trigger`.
@@ -81,8 +86,10 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
 - Pages reference static files through `static('name')`, which appends a
   content hash: no stale JS after a deploy.
 - CDN libraries are pinned to an exact version with a `sha384` integrity hash.
-  To bump one, change the version and recompute the hash:
-  `curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A`.
+  Renovate bumps the versions (custom regex manager on jsDelivr URLs in
+  `renovate.json`); the `karaoke-sri` workflow commits the new hashes on its
+  branch and reruns the tests, which include `make check-sri`. By hand: change
+  the version, then `make sri`.
 
 ## How multi-replica state works
 
@@ -187,6 +194,7 @@ uv sync
 make dev                          # Postgres container karaoke-db on :55432 + app on :8000
 make format                       # ruff format + fix
 make check-format typecheck test  # must pass before any deploy (same as CI)
+make check-sri                    # CDN integrity hashes (network; also in CI)
 uv run pytest -m integration -v   # real YouTube search + download (slow, network)
 ```
 

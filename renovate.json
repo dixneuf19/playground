@@ -1,4 +1,24 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["local>dixneuf19/renovate-presets"]
+  "extends": ["local>dixneuf19/renovate-presets"],
+  "gitIgnoredAuthors": ["41898282+github-actions[bot]@users.noreply.github.com"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "npm packages loaded from jsDelivr in karaoke templates; the karaoke-sri workflow then fixes their integrity hashes",
+      "managerFilePatterns": ["/^karaoke/karaoke/templates/.+\\.html$/"],
+      "matchStrings": [
+        "https://cdn\\.jsdelivr\\.net/npm/(?<depName>[a-z0-9][a-z0-9._-]*)@(?<currentValue>\\d+\\.\\d+\\.\\d+)/"
+      ],
+      "datasourceTemplate": "npm"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "htmx 4 is published under npm's next tag while latest stays on 2.x until 2027: keep proposing 4.x",
+      "matchDatasources": ["npm"],
+      "matchPackageNames": ["htmx.org"],
+      "respectLatest": false
+    }
+  ]
 }
