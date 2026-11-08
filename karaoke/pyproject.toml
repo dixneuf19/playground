@@ -27,6 +27,7 @@ dev = [
 
 [tool.uv]
 prerelease = "if-necessary"
+exclude-newer = "3 days"
 
 [tool.ruff]
 line-length = 88
