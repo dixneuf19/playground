@@ -1,0 +1,211 @@
+// Phone page. The server renders everything (karaoke/templates) and keeps it up
+// to date over the WebSocket (htmx 4 + hx-ws, fragments morphed in by id).
+// What's left here is what only the browser can do: tabs, the name cookie,
+// confirmation sheets, toasts, drag and drop, resizing photos before upload.
+const $ = (id) => document.getElementById(id);
+const CODE = document.body.dataset.code;
+// The name confirmed for this room; the last one used anywhere is only a
+// suggestion, prefilled by the server when joining another room.
+const NAME_COOKIE = `karaoke_name_${CODE}`;
+const LAST_NAME_COOKIE = "karaoke_name";
+const ROOM_COOKIE_AGE = 2 * 24 * 3600; // rooms expire after a day
+
+// --- name -------------------------------------------------------------------
+function cookieName() {
+  const m = document.cookie.match(new RegExp(`(?:^|; )${NAME_COOKIE}=([^;]*)`));
+  return m ? decodeURIComponent(m[1]) : "";
+}
+function saveName(name) {
+  const value = encodeURIComponent(name);
+  document.cookie = `${NAME_COOKIE}=${value}; path=/; max-age=${ROOM_COOKIE_AGE}; samesite=lax`;
+  document.cookie = `${LAST_NAME_COOKIE}=${value}; path=/; max-age=31536000; samesite=lax`;
+  localStorage.removeItem("karaoke.name"); // the pre-cookie name, now superseded
+}
+// Phones that picked a name before cookies: suggest it, still to confirm.
+const legacyName = localStorage.getItem("karaoke.name");
+if (legacyName && !$("name-input").value) $("name-input").value = legacyName;
+function askName() {
+  $("name-sheet").classList.remove("hidden");
+  setTimeout(() => $("name-input").focus(), 50);
+}
+$("name-form").onsubmit = (e) => {
+  e.preventDefault();
+  // By code point, like the server: never splits an emoji.
+  const name = [...$("name-input").value.trim()].slice(0, 40).join("");
+  if (!name) return;
+  saveName(name);
+  location.reload(); // the server renders "moi", my photos… for this name
+};
+$("me-btn").onclick = askName;
+
+// --- tabs -------------------------------------------------------------------
+function show(view) {
+  // Leaving the search tab brings the next search back to the catalogue.
+  if (view !== "search" && $("everywhere").value === "1") {
+    $("everywhere").value = "0";
+    if ($("q").value.trim()) $("search-form").requestSubmit();
+  }
+  document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+  document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
+  window.scrollTo({ top: 0 });
+}
+document.addEventListener("click", (e) => {
+  const tab = e.target.closest("[data-view]");
+  if (tab) show(tab.dataset.view);
+});
+
+// --- toasts, confirmations, errors ------------------------------------------
+let toastTimer;
+function toast(text) {
+  const t = $("toast");
+  t.textContent = text;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+}
+// The server sends `HX-Trigger: {"toast": "…"}`.
+document.body.addEventListener("toast", (e) => toast(e.detail.value));
+
+function confirmSheet(title, text, yes = "Oui") {
+  return new Promise((resolve) => {
+    $("confirm-title").textContent = title;
+    $("confirm-text").textContent = text;
+    $("confirm-yes").textContent = yes;
+    $("confirm-sheet").classList.remove("hidden");
+    const done = (v) => { $("confirm-sheet").classList.add("hidden"); resolve(v); };
+    $("confirm-yes").onclick = () => done(true);
+    $("confirm-no").onclick = () => done(false);
+  });
+}
+// Adding a song needs a name: it shows on the big screen. Checked before the
+// confirmation sheet, which would be pointless without one.
+document.addEventListener("htmx:config:request", (e) => {
+  if (e.detail.ctx.sourceElement.matches("[data-added]") && !cookieName()) {
+    e.preventDefault();
+    askName();
+  }
+});
+// hx-confirm opens our sheet instead of the browser's dialog.
+document.addEventListener("htmx:confirm", (e) => {
+  const el = e.detail.ctx.sourceElement;
+  e.preventDefault();
+  confirmSheet(el.dataset.confirmTitle || "Sûr ?", e.detail.ctx.confirm, el.dataset.confirmYes).then((ok) => {
+    if (ok) e.detail.issueRequest();
+    else e.detail.dropRequest();
+  });
+});
+
+document.addEventListener("htmx:before:request", (e) => {
+  // A search (the form, or the catalogue/YouTube buttons in the results)
+  if (e.detail.ctx.sourceElement.matches("#search-form, #results [hx-get]") && $("q").value.trim()) {
+    $("results").innerHTML = '<div class="skeleton"></div>'.repeat(5);
+  }
+});
+document.addEventListener("htmx:after:request", (e) => {
+  const { sourceElement: el, response } = e.detail.ctx;
+  if (el.matches("[data-added]") && response.status < 400) { el.classList.add("done"); el.textContent = "✓"; }
+});
+// Errors are not swapped (noSwap in the htmx-config meta): show the message.
+document.addEventListener("htmx:response:error", (e) => {
+  let detail = "";
+  try { detail = JSON.parse(e.detail.ctx.text).detail; } catch {}
+  toast(typeof detail === "string" && detail ? detail : "Oups, ça n'a pas marché");
+});
+document.addEventListener("htmx:error", () => toast("Pas de réseau ?"));
+
+// --- search -----------------------------------------------------------------
+$("q").addEventListener("input", () => {
+  if (!$("q").value.trim()) { $("everywhere").value = "0"; $("search-form").requestSubmit(); }
+});
+$("search-form").addEventListener("submit", () => $("q").blur());
+document.addEventListener("click", async (e) => {
+  if (!e.target.closest("[data-paste]")) return;
+  let text = "";
+  try { text = (await navigator.clipboard.readText()).trim(); } catch {}
+  if (!text) { $("q").focus(); toast("Colle le lien dans la barre de recherche"); return; }
+  $("q").value = text;
+  $("search-form").requestSubmit();
+});
+
+// --- live connection ---------------------------------------------------------
+// hx-ws reconnects by itself (closes 1001/1005/1006/1011-1014), and pauses
+// the socket while the phone's screen is off.
+document.addEventListener("htmx:ws:after:connection", () => document.body.classList.remove("offline"));
+document.addEventListener("htmx:ws:close", (e) => {
+  if (e.detail.code === 4404) { location.href = "/"; return; } // room gone
+  if (!document.hidden) document.body.classList.add("offline");
+});
+
+// --- queue: drag and drop ---------------------------------------------------
+// A push while a finger drags would yank the list: hold it, then catch up.
+let dragging = false;
+let missedPush = false;
+document.addEventListener("htmx:ws:before:message:incoming", (e) => {
+  if (dragging) { missedPush = true; e.preventDefault(); }
+});
+function refresh() {
+  missedPush = false;
+  htmx.ajax("GET", `/r/${CODE}/state`, { target: "body", swap: "none" });
+}
+function sortable() {
+  const list = $("queue");
+  if (!list || list.sortable) return;
+  list.sortable = Sortable.create(list, {
+    handle: ".handle",
+    animation: 180,
+    onStart: () => { dragging = true; },
+    onEnd: (e) => {
+      dragging = false;
+      if (e.oldIndex === e.newIndex) { if (missedPush) refresh(); return; }
+      // Then reload the list: a move that changed nothing (the song was
+      // removed meanwhile) brings no push, and the dragged order would stay.
+      htmx.ajax("POST", `/r/${CODE}/do`, {
+        swap: "none",
+        values: { type: "move", item_id: e.item.dataset.id, index: e.newIndex },
+      }).finally(refresh);
+    },
+  });
+}
+sortable();
+
+// --- photos -----------------------------------------------------------------
+const MAX_SIDE = 1920;
+
+async function shrink(file) {
+  // Big phone photos (5-10 MB) would crawl over 4G: resize to ~300 KB JPEG.
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const scale = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bmp.width * scale);
+    canvas.height = Math.round(bmp.height * scale);
+    canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    bmp.close?.();
+    return await new Promise((ok) => canvas.toBlob(ok, "image/jpeg", 0.85));
+  } catch {
+    return file; // let the server judge (JPEG/PNG/WebP accepted)
+  }
+}
+
+$("photo-input").onchange = async (e) => {
+  const files = [...e.target.files];
+  e.target.value = "";
+  if (!files.length) return;
+  if (!cookieName()) { askName(); return; }
+  let sent = 0, failed = 0, lastError = "";
+  $("sending").classList.remove("hidden");
+  for (const [i, file] of files.entries()) {
+    $("sending-text").textContent = `Envoi ${i + 1}/${files.length}…`;
+    const blob = await shrink(file);
+    try {
+      const res = await fetch(`/api/rooms/${CODE}/photos`, {
+        method: "POST", headers: { "Content-Type": blob.type || "application/octet-stream" }, body: blob,
+      });
+      if (res.ok) sent++;
+      else { failed++; lastError = (await res.json().catch(() => ({}))).detail || ""; }
+    } catch { failed++; }
+  }
+  $("sending").classList.add("hidden");
+  if (sent) toast(`${sent} photo${sent > 1 ? "s" : ""} envoyée${sent > 1 ? "s" : ""} 📸`);
+  if (failed) toast(`${failed} échec${failed > 1 ? "s" : ""}${lastError ? " : " + lastError : ""}`);
+};

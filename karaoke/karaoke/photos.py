@@ -23,6 +23,7 @@ class Photo:
     uploader: str
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     # Upload order, to break ties and keep each uploader's photos in order.
+    # Postgres numbers stored photos; the counter only orders in-memory ones.
     seq: int = field(default_factory=lambda: next(_upload_counter))
 
     def to_dict(self) -> dict[str, Any]:
@@ -37,10 +38,6 @@ class PhotoQueue:
     # uploader -> turn number when their last photo was shown
     last_shown: dict[str, int] = field(default_factory=dict)
     turn: int = 0
-
-    def can_add(self, uploader: str) -> bool:
-        mine = sum(1 for p in self.pending if p.uploader == uploader)
-        return mine < MAX_PENDING_PER_UPLOADER
 
     def add(self, photo: Photo) -> None:
         self.pending.append(photo)
@@ -68,6 +65,10 @@ class PhotoQueue:
         self.last_shown[chosen.uploader] = self.turn
         self.turn += 1
         return chosen
+
+    def by(self, uploader: str) -> list[Photo]:
+        """An uploader's own pending photos (only ever shown to them)."""
+        return [p for p in self.upcoming() if p.uploader == uploader]
 
     def upcoming(self) -> list[Photo]:
         """The order photos would show in if nobody uploads anything else."""

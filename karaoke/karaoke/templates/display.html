@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Karaoké — écran</title>
+  <link rel="icon" href="/static/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ static('app.css') }}">
+  <link rel="stylesheet" href="{{ static('display.css') }}">
+</head>
+<body>
+  <div id="offline">Connexion perdue… reconnexion</div>
+  <div id="photo"><div class="frame"><img alt=""></div></div>
+
+  <div id="gate">
+    <div>
+      <button class="btn btn-primary" id="start">▶ Lancer la soirée</button>
+      <p>Clique une fois pour autoriser le son, puis <b>F</b> pour le plein écran. <b>P</b> passe une photo.</p>
+    </div>
+  </div>
+
+  <section id="idle">
+    <div class="hero">
+      <h1 class="brand">Karaoké</h1>
+      <p class="lead muted">Scanne, choisis ta chanson, prends le micro.</p>
+      <div class="join">
+        <div class="qr-big"><img class="qr" alt="QR code"></div>
+        <div>
+          <span class="muted">Code de la salle</span>
+          <span class="code room-code"></span>
+          <div class="url muted join-url"></div>
+        </div>
+      </div>
+    </div>
+    <div class="side">
+      <h2>À suivre</h2>
+      <div class="qlist" id="idle-queue"></div>
+      <div class="prep hidden" id="prep"><span class="spinner"></span><span id="prep-text"></span></div>
+    </div>
+  </section>
+
+  <section id="stage" class="hidden">
+    <video id="video" playsinline preload="auto"></video>
+    <div id="singer" class="overlay"><span class="eq"><i></i><i></i><i></i></span><span id="singer-name"></span></div>
+    <div id="corner" class="overlay">
+      <img class="qr" alt="QR code">
+      <div><div class="muted">Ajoute ta chanson</div><div class="code room-code"></div></div>
+    </div>
+    <div id="upnext" class="overlay off"></div>
+    <div id="pausebadge" class="overlay hidden">⏸ Pause</div>
+  </section>
+
+  <section id="turn" class="hidden">
+    <div>
+      <div class="who">Au tour de</div>
+      <div class="name brand pop" id="turn-name"></div>
+      <div class="song" id="turn-song"></div>
+      <div class="artist" id="turn-artist"></div>
+      <div class="cancel hidden" id="turn-cancel"></div>
+      <div class="count" id="turn-count"></div>
+    </div>
+  </section>
+
+<script src="{{ static('common.js') }}"></script>
+<script src="{{ static('display.js') }}"></script>
+</body>
+</html>

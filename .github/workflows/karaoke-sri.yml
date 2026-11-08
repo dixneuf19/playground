@@ -1,0 +1,45 @@
+name: karaoke - SRI hashes
+
+# Renovate bumps the CDN versions in the karaoke templates but can't recompute
+# their integrity hashes: this commits the new hashes on its branches.
+on:
+  push:
+    branches:
+      - "renovate/**"
+    paths:
+      - "karaoke/karaoke/templates/**"
+
+permissions:
+  contents: write
+  actions: write
+
+defaults:
+  run:
+    working-directory: karaoke
+
+jobs:
+  sri:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+
+      - run: uv python install
+
+      - run: uv sync --dev
+
+      - run: make sri
+
+      - name: Commit the new hashes and rerun the tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(karaoke): update CDN integrity hashes"
+          git push
+          gh workflow run karaoke-test.yml --ref "$GITHUB_REF_NAME"

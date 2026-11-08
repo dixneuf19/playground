@@ -5,6 +5,9 @@ on:
     paths:
       - "karaoke/**"
       - ".github/workflows/karaoke-test.yml"
+  # Run by karaoke-sri after it fixes a Renovate branch: its own push can't
+  # trigger workflows.
+  workflow_dispatch:
 
 defaults:
   run:
@@ -43,3 +46,6 @@ jobs:
 
       - name: Test with pytest
         run: make test
+
+      - name: Check CDN integrity hashes
+        run: make check-sri

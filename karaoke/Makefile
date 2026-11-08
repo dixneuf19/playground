@@ -14,6 +14,15 @@ test:
 
 .PHONY: format check-format typecheck test
 
+# Integrity hashes of the CDN scripts in the templates (network needed)
+sri:
+	uv run python scripts/sri.py
+
+check-sri:
+	uv run python scripts/sri.py --check
+
+.PHONY: sri check-sri
+
 LOCAL_DB = postgresql://postgres:karaoke@127.0.0.1:55432/postgres
 
 db:

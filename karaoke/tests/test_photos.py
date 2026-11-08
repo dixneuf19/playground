@@ -1,4 +1,4 @@
-from karaoke.photos import MAX_PENDING_PER_UPLOADER, Photo, PhotoQueue
+from karaoke.photos import Photo, PhotoQueue
 
 
 def _queue(*uploaders: str) -> tuple[PhotoQueue, list[Photo]]:
@@ -56,10 +56,10 @@ def test_only_uploader_can_cancel() -> None:
     assert [p.uploader for p in q.pending] == ["b"]
 
 
-def test_pending_limit_per_uploader() -> None:
-    q, _ = _queue(*["a"] * MAX_PENDING_PER_UPLOADER)
-    assert not q.can_add("a")
-    assert q.can_add("b")
+def test_by_lists_only_the_uploader_s_photos_in_show_order() -> None:
+    q, photos = _queue("a", "a", "b")
+    assert [p.id for p in q.by("a")] == [photos[0].id, photos[1].id]
+    assert [p.id for p in q.by("b")] == [photos[2].id]
 
 
 def test_snapshot_is_anonymous() -> None:

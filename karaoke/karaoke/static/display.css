@@ -1,0 +1,133 @@
+html, body { height: 100%; overflow: hidden; }
+body { font-size: clamp(14px, 1.25vw, 28px); cursor: default; }
+body.playing { cursor: none; }
+
+/* --- idle screen: big QR + queue ------------------------------------ */
+#idle {
+  position: fixed; inset: 0;
+  display: grid; grid-template-columns: 1.1fr 1fr; gap: 4vw;
+  padding: 6vh 6vw; align-items: center;
+}
+.hero h1 { font-size: 5.5em; line-height: 0.95; margin: 0 0 0.25em; }
+.hero .lead { font-size: 1.5em; margin: 0 0 1.6em; }
+.join { display: flex; gap: 2em; align-items: center; }
+.qr-big {
+  width: 15em; height: 15em; background: white; border-radius: 1.2em; padding: 0.6em;
+  box-shadow: 0 0 0 0.35em rgba(255, 61, 139, 0.4), var(--shadow);
+}
+.qr-big img { width: 100%; height: 100%; }
+.join .code { font-size: 3.4em; display: block; color: var(--text); }
+.join .url { font-size: 1em; margin-top: 0.4em; word-break: break-all; }
+.side { align-self: stretch; display: flex; flex-direction: column; min-height: 0; }
+.side h2 { font-size: 1.1em; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin: 0 0 1em; }
+.qlist { display: flex; flex-direction: column; gap: 0.7em; overflow: hidden; }
+.qitem { display: flex; gap: 1em; align-items: center; padding: 0.7em; }
+.qitem img { width: 6.5em; aspect-ratio: 16/9; object-fit: cover; border-radius: 0.6em; flex: none; }
+.qitem .t { font-weight: 700; font-size: 1.15em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qitem .a { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qitem .s { margin-left: auto; color: var(--pink); font-weight: 700; white-space: nowrap; padding-left: 0.5em; }
+.qitem .meta { min-width: 0; }
+.empty { padding: 2.5em 1.5em; text-align: center; color: var(--muted); font-size: 1.2em; border-style: dashed; }
+.prep { display: flex; align-items: center; gap: 0.8em; margin-top: 1.5em; font-size: 1.2em; color: var(--muted); }
+
+/* --- player ---------------------------------------------------------- */
+#stage { position: fixed; inset: 0; background: black; }
+#video { width: 100%; height: 100%; object-fit: contain; background: black; }
+.overlay { position: absolute; transition: opacity 0.5s, transform 0.5s; }
+#singer {
+  top: 2.5vh; left: 2vw; padding: 0.55em 1.1em; border-radius: 999px;
+  background: rgba(12, 7, 24, 0.7); backdrop-filter: blur(10px);
+  font-weight: 700; font-size: 1.1em; display: flex; gap: 0.6em; align-items: center;
+}
+#corner {
+  right: 2vw; bottom: 3vh; display: flex; align-items: center; gap: 0.8em;
+  padding: 0.6em; border-radius: 1em; background: rgba(12, 7, 24, 0.7); backdrop-filter: blur(10px);
+}
+#corner img { width: 5.5em; height: 5.5em; background: white; border-radius: 0.5em; padding: 0.2em; }
+#corner .code { font-size: 1.5em; }
+#corner .muted { font-size: 0.85em; }
+#upnext {
+  left: 50%; bottom: 3vh; transform: translate(-50%, 0);
+  padding: 0.8em 1.6em; border-radius: 999px; font-size: 1.15em;
+  background: var(--grad); font-weight: 600; box-shadow: var(--shadow); white-space: nowrap;
+}
+#upnext.off { opacity: 0; transform: translate(-50%, 150%); }
+#pausebadge {
+  top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 2.5em; font-weight: 800;
+  padding: 0.6em 1.4em; border-radius: 1em; background: rgba(12, 7, 24, 0.8); backdrop-filter: blur(10px);
+}
+
+/* --- interstitial "your turn" --------------------------------------- */
+#turn {
+  position: fixed; inset: 0; display: grid; place-items: center; text-align: center;
+  background: radial-gradient(circle at 50% 40%, rgba(123, 92, 255, 0.35), transparent 60%), var(--bg);
+  z-index: 10;
+}
+#turn .who { font-size: 1.6em; color: var(--muted); margin-bottom: 0.3em; }
+#turn .name { font-size: 6em; font-weight: 800; line-height: 1; margin-bottom: 0.3em; }
+#turn .song { font-size: 2.2em; font-weight: 700; }
+#turn .artist { font-size: 1.4em; color: var(--muted); margin-top: 0.2em; }
+#turn .count { margin-top: 1.4em; font-size: 1.2em; color: var(--muted); }
+#turn .cancel {
+  display: inline-block; margin-top: 1em; padding: 0.4em 1.1em; border-radius: 999px;
+  font-size: 1.3em; font-weight: 700; color: #ffb020; background: rgba(255, 176, 32, 0.14);
+}
+#turn .pop { animation: pop 0.6s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+@keyframes pop { from { transform: scale(0.6); opacity: 0; } }
+
+/* --- start gate (browsers block autoplay with sound) ----------------- */
+#gate {
+  position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; text-align: center;
+  background: rgba(12, 7, 24, 0.92); backdrop-filter: blur(6px);
+}
+#gate .btn { font-size: 1.6em; padding: 1em 2em; }
+#gate p { margin-top: 1.5em; color: var(--muted); }
+
+/* --- photos from phones (anonymous) --------------------------------- */
+#photo {
+  position: fixed; z-index: 5; pointer-events: none;
+  font-size: 1vw; /* frame sizes in em scale with the screen */
+  opacity: 0; transition: opacity 0.5s ease;
+}
+#photo.show { opacity: 1; }
+/* Instant-photo print: light paper, wider bottom edge, a strip of
+   pink → violet tape, a small random tilt per photo. */
+#photo .frame {
+  position: relative;
+  padding: 0.9em 0.9em 3.2em;
+  background: linear-gradient(170deg, #fffdfb, #efe9f7);
+  border-radius: 0.35em;
+  box-shadow: 0 0.2em 0.4em rgba(0, 0, 0, 0.25), 0 1.6em 4em rgba(0, 0, 0, 0.55);
+  transform: rotate(var(--tilt, -2deg)) translateY(1.5em) scale(0.92);
+  transition: transform 0.7s cubic-bezier(0.2, 1.3, 0.4, 1);
+}
+#photo.show .frame { transform: rotate(var(--tilt, -2deg)); }
+/* washi tape: translucent, faint stripes, torn ends */
+#photo .frame::before {
+  content: ""; position: absolute; z-index: 1; top: -1.1em; left: 50%;
+  width: 9em; height: 3em; transform: translateX(-50%) rotate(-4deg);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 45%, rgba(0, 0, 0, 0.06)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.07) 0 0.25em, transparent 0.25em 0.5em),
+    linear-gradient(90deg, rgba(255, 61, 139, 0.62), rgba(123, 92, 255, 0.62));
+  clip-path: polygon(0% 0.0%, 3% 16.7%, 0% 33.3%, 3% 50.0%, 0% 66.7%, 3% 83.3%, 0% 100.0%, 100% 100.0%, 97% 83.3%, 100% 66.7%, 97% 50.0%, 100% 33.3%, 97% 16.7%, 100% 0.0%);
+  backdrop-filter: blur(1px);
+  filter: drop-shadow(0 0.1em 0.15em rgba(0, 0, 0, 0.2));
+}
+#photo img { display: block; object-fit: contain; border-radius: 0.15em; background: #1a1230; }
+/* during a song: rotates between three spots, never bottom-right (QR code) */
+#photo.corner { font-size: 0.75vw; }
+#photo.corner.pos-0 { top: 5vh; right: 3vw; }
+#photo.corner.pos-1 { top: 13vh; left: 3vw; } /* below the singer badge */
+#photo.corner.pos-2 { bottom: 6vh; left: 3vw; }
+#photo.corner img { max-width: 28vw; max-height: 38vh; }
+/* between songs: big, centred, over a dimmed backdrop */
+#photo.center { inset: 0; display: grid; place-items: center; background: rgba(12, 7, 24, 0.75); }
+#photo.center img { max-width: 64vw; max-height: 66vh; }
+
+#offline {
+  position: fixed; top: 1em; left: 50%; transform: translateX(-50%); z-index: 30;
+  background: var(--red); color: white; padding: 0.4em 1em; border-radius: 999px; font-weight: 600;
+  display: none;
+}
+body.offline #offline { display: block; }

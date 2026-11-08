@@ -1,0 +1,155 @@
+{#
+  The parts of the phone page that follow the room, one macro each. The page
+  calls them in place; _guest_push.html calls them all with `oob` after every
+  change, and htmx replaces each element by id (morphed, so scroll, focus and
+  drags survive). Every action posts to /r/<code>/do; the new state comes back
+  by push. Import "with context": the macros read room, me and oob.
+#}
+{% set o = 'hx-swap-oob="outerMorph"'|safe if oob else '' %}
+{% set do = "/r/" ~ room.code ~ "/do" %}
+{% set c = room.current %}
+{% set paused = room.state == "paused" %}
+
+{% macro action(vals, confirm=None, title=None, yes=None) -%}
+hx-post="{{ do }}" hx-vals='{{ vals|tojson }}' hx-swap="none"
+{%- if confirm %} hx-confirm="{{ confirm }}" data-confirm-title="{{ title }}" data-confirm-yes="{{ yes }}"{% endif %}
+{%- endmacro %}
+
+{% macro now_playing(id) %}
+<div id="{{ id }}" class="now card{{ ' hidden' if not c }}{{ ' paused' if paused }}" {{ o }}>
+  {% if c %}
+  <img src="{{ c.thumbnail }}" alt="">
+  <div class="meta">
+    <div class="label"><span class="eq"><i></i><i></i><i></i></span>{{ "En pause" if paused else "En cours" }}</div>
+    <div class="t ellipsis">{{ c.title }}</div>
+    <div class="muted ellipsis small">{{ c.singer }}{% if c.artist %} · {{ c.artist }}{% endif %}</div>
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro queue_badge() %}
+<span id="badge" class="badge{{ ' hidden' if not room.queue }}" {{ o }}>{{ room.queue|length }}</span>
+{% endmacro %}
+
+{% macro queue_panel() %}
+<div id="queue-panel" {{ o }}>
+  <div class="qhead">
+    <h2>File d'attente</h2>
+    <span class="muted">{{ room.queue|length|plural("chanson") if room.queue }}</span>
+  </div>
+  <div class="list" id="queue">
+    {% for i in room.queue %}
+    {% set mine = me and i.singer == me %}
+    <div class="card qi{{ ' mine' if mine }}" id="qi-{{ i.id }}" data-id="{{ i.id }}">
+      <span class="handle">⠿</span>
+      <span class="pos">{{ loop.index }}</span>
+      <img src="{{ i.thumbnail }}" alt="">
+      <div class="meta">
+        <div class="t ellipsis">{{ i.title }}</div>
+        <div class="sub">
+          <span class="ellipsis">{{ i.singer }}</span>
+          {% if mine %}<span class="tag tag-me">moi</span>{% endif %}
+          {% if i.cancelled %}<span class="tag tag-cancel">🚫</span>{% endif %}
+          {% if i.status == "ready" %}
+          <span class="tag tag-ready">Prêt</span>
+          {% elif i.status == "error" %}
+          <span class="tag tag-yt">Échec</span>
+          <button class="tag" {{ action({"type": "retry", "item_id": i.id}) }}>Réessayer</button>
+          {% elif i.status == "downloading" %}
+          <span class="spinner small-spinner"></span> {{ (i.progress * 100)|round|int }}%
+          {% else %}
+          <span class="spinner small-spinner"></span> en attente
+          {% endif %}
+        </div>
+        {% if i.status == "downloading" %}
+        <div class="bar"><i style="width:{{ (i.progress * 100)|round|int }}%"></i></div>
+        {% endif %}
+      </div>
+      {% if mine %}
+      <button class="x" aria-label="Retirer" {{ action({"type": "remove", "item_id": i.id}) }}>✕</button>
+      {% else %}
+      <button class="x" aria-label="Retirer" {{ action({"type": "remove", "item_id": i.id},
+        "« " ~ i.title ~ " » a été choisie par " ~ i.singer ~ ".", "Retirer cette chanson ?", "Retirer") }}>✕</button>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% if not room.queue %}
+  <div class="placeholder">
+    <div class="big">🎶</div>La file est vide.<br>
+    <button class="btn btn-primary" style="margin-top:16px" data-view="search">Choisir une chanson</button>
+  </div>
+  {% elif room.queue|length > 1 %}
+  <p class="muted hint">Maintiens ⠿ et glisse pour réordonner.</p>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro stage() %}
+<div class="stage" id="stage" {{ o }}>
+  {% if not c %}
+  <div class="placeholder">
+    <div class="big">🎤</div>Rien ne joue pour l'instant.<br>
+    {{ "La prochaine chanson se prépare…" if room.queue else "Ajoute une chanson pour lancer la soirée !" }}
+  </div>
+  {% else %}
+  <img class="art" src="{{ c.thumbnail|replace('mqdefault', 'hqdefault') }}" alt="">
+  <div class="t">{{ c.title }}</div>
+  <div class="a">{{ c.artist }}</div>
+  <div class="singer"><span class="tag tag-me">🎤 {{ c.singer }}</span></div>
+  <div class="controls">
+    <button class="ctl" aria-label="Recommencer" {{ action({"type": "restart"}) }}>⟲</button>
+    <button class="ctl main" aria-label="{{ 'Lecture' if paused else 'Pause' }}"
+      {{ action({"type": "play" if paused else "pause"}) }}>{{ "▶" if paused else "❚❚" }}</button>
+    <button class="ctl" aria-label="Suivante" {{ action({"type": "skip"},
+      c.singer ~ " est en train de chanter « " ~ c.title ~ " ».", "Passer la chanson ?", "Passer") }}>⏭</button>
+  </div>
+  <div class="vol">
+    <span>🔈</span>
+    <input type="range" id="volume" name="value" min="0" max="1" step="0.05" value="{{ room.volume }}"
+      hx-post="{{ do }}" hx-vals='{"type": "volume"}' hx-trigger="change" hx-swap="none">
+    <span>🔊</span>
+  </div>
+  <p class="muted stats">{{ room.sung|plural("chanson") }} chantée{{ "s" if room.sung > 1 }} ce soir</p>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro photo_badge() %}
+<span id="photo-badge" class="badge{{ ' hidden' if not my_photos }}" {{ o }}>{{ my_photos|length }}</span>
+{% endmacro %}
+
+{% macro onscreen() %}
+<div id="onscreen" class="card onscreen{{ ' hidden' if not room.photo }}" {{ o }}>
+  {% if room.photo %}
+  <img src="/photos/{{ room.code }}/{{ room.photo.id }}" alt="">
+  <div class="meta">
+    <b>À l'écran</b>
+    <div class="muted small">{{ "C'est la tienne 🤫" if photo_is_mine else "Une photo de quelqu'un…" }}</div>
+  </div>
+  <button class="btn btn-ghost" {{ action({"type": "photo_skip"}) }}>Passer</button>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro my_photos_panel() %}
+<div id="my-photos-panel" {{ o }}>
+  <div class="section-title">
+    <span>Mes photos en attente</span>
+    <span class="muted small">{{ photos_total ~ " au total" if photos_total }}</span>
+  </div>
+  <div class="grid">
+    {% for n, p in my_photos %}
+    <div class="ph" id="ph-{{ p.id }}">
+      <img src="/photos/{{ room.code }}/{{ p.id }}" alt="" loading="lazy">
+      <span class="n">{{ "la suivante" if n == 1 else "n°" ~ n }}</span>
+      <button class="x" aria-label="Annuler" {{ action({"type": "photo_remove", "photo_id": p.id}) }}>✕</button>
+    </div>
+    {% endfor %}
+  </div>
+  {% if not my_photos %}
+  <p class="muted empty-photos">Aucune photo en attente.</p>
+  {% endif %}
+</div>
+{% endmacro %}

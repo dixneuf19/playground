@@ -1,8 +1,10 @@
 """Song search: curated karaoke channels first, all of YouTube on request."""
 
+import asyncio
 import difflib
 import logging
 import re
+import time
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
@@ -163,3 +165,66 @@ def lookup_video(video_id: str) -> list[SearchResult]:
         return []
     r = _to_result({**info, "ie_key": "Youtube"}, curated=False)
     return [r] if r else []
+
+
+MAX_CONCURRENT_SEARCHES = 4  # per replica; more requests wait their turn
+SEARCH_CACHE_SECONDS = 600
+SEARCH_CACHE_SIZE = 500
+
+
+@dataclass
+class SearchPage:
+    query: str
+    everywhere: bool
+    results: list[SearchResult]
+    # False: the catalogue has nothing matching every word, so the phone
+    # offers YouTube up front.
+    strong: bool
+
+
+class Searcher:
+    """yt-dlp searches, a few at a time per replica and cached for a while:
+    hammering YouTube from the home IP could get downloads blocked."""
+
+    def __init__(self, channels: list[str]) -> None:
+        self.channels = channels
+        self._slots = asyncio.Semaphore(MAX_CONCURRENT_SEARCHES)
+        self._cache: dict[tuple[str, str], tuple[float, list[SearchResult]]] = {}
+        self._warming: set[asyncio.Task[Any]] = set()
+
+    async def find(self, query: str, everywhere: bool) -> SearchPage:
+        q = query.strip()[:120]
+        if not q:
+            return SearchPage(q, everywhere, [], strong=False)
+        link = video_id_from_url(q)
+        results = await self._search(q, everywhere, link)
+        strong = everywhere or bool(link) or any(is_strong(q, r) for r in results)
+        if not strong:
+            # The phone will likely ask YouTube next: get it ready.
+            task = asyncio.create_task(self._search(q, True, None))
+            self._warming.add(task)
+            task.add_done_callback(self._warming.discard)
+        return SearchPage(q, everywhere, results, strong)
+
+    async def _search(
+        self, q: str, everywhere: bool, link: str | None
+    ) -> list[SearchResult]:
+        key = ("link", link) if link else ("all" if everywhere else "cat", normalize(q))
+        now = time.monotonic()
+        hit = self._cache.get(key)
+        if hit and hit[0] > now:
+            return hit[1]
+        async with self._slots:
+            if link:
+                results = await asyncio.to_thread(lookup_video, link)
+            elif everywhere:
+                results = await asyncio.to_thread(search_youtube, q)
+            else:
+                results = await asyncio.to_thread(search_channels, q, self.channels)
+        if results:  # don't remember a failure
+            if len(self._cache) >= SEARCH_CACHE_SIZE:
+                self._cache = {k: v for k, v in self._cache.items() if v[0] > now}
+                if len(self._cache) >= SEARCH_CACHE_SIZE:
+                    self._cache.clear()
+            self._cache[key] = (now + SEARCH_CACHE_SECONDS, results)
+        return results

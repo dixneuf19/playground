@@ -6,6 +6,8 @@ requires-python = ">=3.13"
 dependencies = [
     "asyncpg>=0.32.0",
     "fastapi>=0.115",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.20",
     "segno>=1.6",
     "uvicorn[standard]>=0.32",
     # Nightly, as in soundhoard: stable releases lag behind YouTube's player changes.
@@ -17,7 +19,7 @@ karaoke = "karaoke.__main__:main"
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28",
+    "httpx2>=2.16.0",
     "pytest>=8.3",
     "ruff>=0.11",
     "ty>=0.0.1a7",
@@ -33,6 +35,9 @@ target-version = "py313"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "C4", "UP", "N", "W", "SIM", "ARG", "PIE", "T20", "RUF"]
 ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*" = ["T20"]  # command-line tools print
 
 [tool.pytest.ini_options]
 markers = ["integration: slow tests that require network (YouTube)"]

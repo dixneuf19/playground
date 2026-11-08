@@ -21,63 +21,73 @@ from karaoke.photos import (
     Photo,
     PhotoQueue,
 )
-from karaoke.rooms import QueueItem, Room, generate_code
+from karaoke.rooms import ItemStatus, QueueItem, Room, generate_code
 
 logger = logging.getLogger(__name__)
 
 CHANNEL = "karaoke"
 SCHEMA_LOCK = 4242_0001  # pg_advisory_xact_lock keys
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS rooms (
-    code          text PRIMARY KEY,
-    state         text NOT NULL DEFAULT 'idle',
-    volume        real NOT NULL DEFAULT 0.9,
-    sung          int  NOT NULL DEFAULT 0,
-    photo_id      text,
-    photo_until   timestamptz,
-    photo_turn    int  NOT NULL DEFAULT 0,
-    created_at    timestamptz NOT NULL DEFAULT now(),
-    last_activity timestamptz NOT NULL DEFAULT now()
-);
-ALTER TABLE rooms ADD COLUMN IF NOT EXISTS position real NOT NULL DEFAULT 0;
-ALTER TABLE rooms ADD COLUMN IF NOT EXISTS position_at timestamptz;
--- Which song `position` belongs to: reports for another song are ignored.
-ALTER TABLE rooms ADD COLUMN IF NOT EXISTS current_item_id text;
-CREATE TABLE IF NOT EXISTS videos (
-    video_id   text PRIMARY KEY,
-    status     text   NOT NULL DEFAULT 'pending',
-    progress   real   NOT NULL DEFAULT 0,
-    title      text   NOT NULL DEFAULT '',
-    size       bigint NOT NULL DEFAULT 0,
-    last_used  timestamptz NOT NULL DEFAULT now(),
-    claimed_by text,      -- unused since the leader runs every download
-    heartbeat  timestamptz -- unused, kept so the schema stays additive
-);
-CREATE TABLE IF NOT EXISTS queue_items (
-    id         text PRIMARY KEY,
-    room_code  text NOT NULL REFERENCES rooms(code) ON DELETE CASCADE,
-    position   int  NOT NULL,
-    is_current boolean NOT NULL DEFAULT false,
-    video_id   text NOT NULL,
-    title      text NOT NULL DEFAULT '',
-    artist     text NOT NULL DEFAULT '',
-    singer     text NOT NULL DEFAULT '',
-    thumbnail  text NOT NULL DEFAULT '',
-    cancelled  text
-);
-CREATE INDEX IF NOT EXISTS queue_items_room  ON queue_items (room_code);
-CREATE INDEX IF NOT EXISTS queue_items_video ON queue_items (video_id);
-CREATE TABLE IF NOT EXISTS photos (
-    id         text PRIMARY KEY,
-    room_code  text NOT NULL REFERENCES rooms(code) ON DELETE CASCADE,
-    uploader   text NOT NULL,
-    seq        bigserial,
-    state      text NOT NULL DEFAULT 'pending',
-    shown_turn int
-);
-CREATE INDEX IF NOT EXISTS photos_room ON photos (room_code, state);
-"""
+# Applied in order at startup, each once (recorded in schema_migrations), under
+# an advisory lock. A rolling update runs the previous code against the new
+# schema: only add things, or drop what the previous release no longer reads.
+MIGRATIONS: list[str] = [
+    # 1: the schema as it stood before migrations were numbered; idempotent
+    # so that it also runs on databases created by that code.
+    """
+    CREATE TABLE IF NOT EXISTS rooms (
+        code          text PRIMARY KEY,
+        state         text NOT NULL DEFAULT 'idle',
+        volume        real NOT NULL DEFAULT 0.9,
+        sung          int  NOT NULL DEFAULT 0,
+        photo_id      text,
+        photo_until   timestamptz,
+        photo_turn    int  NOT NULL DEFAULT 0,
+        created_at    timestamptz NOT NULL DEFAULT now(),
+        last_activity timestamptz NOT NULL DEFAULT now()
+    );
+    ALTER TABLE rooms ADD COLUMN IF NOT EXISTS position real NOT NULL DEFAULT 0;
+    ALTER TABLE rooms ADD COLUMN IF NOT EXISTS position_at timestamptz;
+    -- Which song `position` belongs to: reports for another song are ignored.
+    ALTER TABLE rooms ADD COLUMN IF NOT EXISTS current_item_id text;
+    CREATE TABLE IF NOT EXISTS videos (
+        video_id   text PRIMARY KEY,
+        status     text   NOT NULL DEFAULT 'pending',
+        progress   real   NOT NULL DEFAULT 0,
+        title      text   NOT NULL DEFAULT '',
+        size       bigint NOT NULL DEFAULT 0,
+        last_used  timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS queue_items (
+        id         text PRIMARY KEY,
+        room_code  text NOT NULL REFERENCES rooms(code) ON DELETE CASCADE,
+        position   int  NOT NULL,
+        is_current boolean NOT NULL DEFAULT false,
+        video_id   text NOT NULL,
+        title      text NOT NULL DEFAULT '',
+        artist     text NOT NULL DEFAULT '',
+        singer     text NOT NULL DEFAULT '',
+        thumbnail  text NOT NULL DEFAULT '',
+        cancelled  text
+    );
+    CREATE INDEX IF NOT EXISTS queue_items_room  ON queue_items (room_code);
+    CREATE INDEX IF NOT EXISTS queue_items_video ON queue_items (video_id);
+    CREATE TABLE IF NOT EXISTS photos (
+        id         text PRIMARY KEY,
+        room_code  text NOT NULL REFERENCES rooms(code) ON DELETE CASCADE,
+        uploader   text NOT NULL,
+        seq        bigserial,
+        state      text NOT NULL DEFAULT 'pending',
+        shown_turn int
+    );
+    CREATE INDEX IF NOT EXISTS photos_room ON photos (room_code, state);
+    """,
+    # 2: download claims, unused since the leader runs every download.
+    """
+    ALTER TABLE videos DROP COLUMN IF EXISTS claimed_by;
+    ALTER TABLE videos DROP COLUMN IF EXISTS heartbeat;
+    """,
+]
 
 
 @dataclass
@@ -88,10 +98,16 @@ class RoomTx:
     room: Room
     save: bool = True
     commands: list[dict[str, Any]] = field(default_factory=list)
-    # Filled on save: photos that left the queue without being shown (cancelled)
+    # Wake the leader on commit: a queued video waits to be downloaded.
+    wake_downloads: bool = False
+    # Filled on save, for the caller to delete their files: photos that left
+    # the queue without being shown (cancelled), and the photo that left the
+    # screen (deleted after the screens fade it out).
     removed_photos: list[str] = field(default_factory=list)
+    hidden_photo: str | None = None
     _loaded_pending: set[str] = field(default_factory=set)
     _loaded_current: str | None = None
+    _loaded_photo: str | None = None
 
     def command(self, action: str, **extra: Any) -> None:
         """Send to the room's screens, on whichever replica they are connected."""
@@ -115,7 +131,23 @@ class Store:
     async def migrate(self) -> None:
         async with self.pool.acquire() as conn, conn.transaction():
             await conn.execute("SELECT pg_advisory_xact_lock($1)", SCHEMA_LOCK)
-            await conn.execute(SCHEMA)
+            await conn.execute(
+                """CREATE TABLE IF NOT EXISTS schema_migrations (
+                       version    int PRIMARY KEY,
+                       applied_at timestamptz NOT NULL DEFAULT now())"""
+            )
+            done = {
+                r["version"]
+                for r in await conn.fetch("SELECT version FROM schema_migrations")
+            }
+            for version, sql in enumerate(MIGRATIONS, 1):
+                if version in done:
+                    continue
+                logger.info("Applying schema migration %d", version)
+                await conn.execute(sql)
+                await conn.execute(
+                    "INSERT INTO schema_migrations (version) VALUES ($1)", version
+                )
 
     async def ping(self) -> None:
         await self.pool.fetchval("SELECT 1")
@@ -148,24 +180,32 @@ class Store:
             )
         )
 
-    async def snapshot(self, code: str) -> dict[str, Any] | None:
-        # One consistent view across the room, queue and photo queries.
+    async def load_room(self, code: str) -> Room | None:
+        """Read-only, for pushes and pages: one consistent view across the
+        room, queue and photo queries."""
         async with (
             self.pool.acquire() as conn,
             conn.transaction(isolation="repeatable_read", readonly=True),
         ):
-            room = await self._load(conn, code.upper(), lock=None)
+            return await self._load(conn, code.upper(), lock=None)
+
+    async def snapshot(self, code: str) -> dict[str, Any] | None:
+        room = await self.load_room(code)
         return room.snapshot() if room else None
 
-    async def save_position(self, code: str, item_id: str, seconds: float) -> None:
+    async def save_position(
+        self, code: str, item_id: str, seconds: float, now: float
+    ) -> None:
         """Periodic report from a screen: no lock and no notify, nobody needs
-        a push for it. Ignored once the song is no longer the current one."""
+        a push for it. Ignored once the song is no longer the current one.
+        Timestamps come from the app's clock, like every other room time."""
         await self.pool.execute(
-            """UPDATE rooms SET position = $3, position_at = now()
+            """UPDATE rooms SET position = $3, position_at = to_timestamp($4)
                WHERE code = $1 AND current_item_id = $2""",
             code.upper(),
             item_id,
             max(0.0, seconds),
+            now,
         )
 
     @asynccontextmanager
@@ -182,14 +222,18 @@ class Store:
                 room,
                 _loaded_pending={p.id for p in room.photos.pending},
                 _loaded_current=room.current.id if room.current else None,
+                _loaded_photo=room.photo.id if room.photo else None,
             )
             yield tx
             if not tx.save:
                 return
             await self._save(tx)
+            # Delivered on commit, so every replica reads the saved state.
             await self._notify(conn, {"room": room.code})
             for cmd in tx.commands:
                 await self._notify(conn, {"room": room.code, "command": cmd})
+            if tx.wake_downloads:
+                await self._notify(conn, {"downloads": True})
 
     async def _load(
         self, conn: asyncpg.Connection, code: str, lock: str | None
@@ -198,8 +242,7 @@ class Store:
             f"""SELECT code, state, volume, sung, photo_id, photo_turn,
                        extract(epoch FROM photo_until)::float8 AS photo_until,
                        position,
-                       extract(epoch FROM position_at)::float8 AS position_at,
-                       extract(epoch FROM last_activity)::float8 AS last_activity
+                       extract(epoch FROM position_at)::float8 AS position_at
                 FROM rooms WHERE code = $1 {lock or ""}""",
             code,
         )
@@ -252,7 +295,6 @@ class Store:
             state=row["state"],
             volume=row["volume"],
             sung=row["sung"],
-            last_activity=row["last_activity"],
             photos=PhotoQueue(pending, last_shown, row["photo_turn"]),
             photo=on_screen,
             photo_until=row["photo_until"],
@@ -319,6 +361,8 @@ class Store:
             else:
                 await conn.execute("DELETE FROM photos WHERE id = $1", photo_id)
                 tx.removed_photos.append(photo_id)
+        if tx._loaded_photo and tx._loaded_photo != (room.photo and room.photo.id):
+            tx.hidden_photo = tx._loaded_photo
 
     async def prune_rooms(self, ttl_seconds: int) -> list[str]:
         rows = await self.pool.fetch(
@@ -352,29 +396,36 @@ class Store:
         )
         return added is not None
 
-    async def rooms_due_for_photo(self) -> list[str]:
+    async def rooms_due_for_photo(self, now: float) -> list[str]:
         rows = await self.pool.fetch(
             """SELECT code FROM rooms r
-               WHERE (photo_until IS NULL OR photo_until <= now())
+               WHERE (photo_until IS NULL OR photo_until <= to_timestamp($1))
                  AND (photo_id IS NOT NULL OR EXISTS (
                      SELECT 1 FROM photos p
-                     WHERE p.room_code = r.code AND p.state = 'pending'))"""
+                     WHERE p.room_code = r.code AND p.state = 'pending'))""",
+            now,
         )
         return [r["code"] for r in rows]
 
     # --- videos -------------------------------------------------------------
 
-    async def video_status(self, video_id: str) -> str:
-        await self.pool.execute(
-            "INSERT INTO videos (video_id) VALUES ($1) ON CONFLICT DO NOTHING", video_id
-        )
-        return await self.pool.fetchval(
-            "SELECT status FROM videos WHERE video_id = $1", video_id
+    async def video_status(
+        self, video_id: str, conn: asyncpg.Connection | None = None
+    ) -> ItemStatus:
+        """Register the video if new (as pending) and return its status."""
+        db = conn or self.pool
+        return await db.fetchval(
+            """INSERT INTO videos (video_id) VALUES ($1)
+               ON CONFLICT (video_id) DO UPDATE SET video_id = EXCLUDED.video_id
+               RETURNING status""",
+            video_id,
         )
 
-    async def reset_video(self, video_id: str) -> None:
+    async def reset_video(
+        self, video_id: str, conn: asyncpg.Connection | None = None
+    ) -> None:
         """Download again: after an error, or when the file went missing."""
-        await self.pool.execute(
+        await (conn or self.pool).execute(
             """UPDATE videos SET status = 'pending', progress = 0
                WHERE video_id = $1 AND status IN ('ready', 'error')""",
             video_id,
