@@ -32,6 +32,9 @@ def test_page_asks_for_a_name_until_it_has_one(client: TestClient) -> None:
     assert "🎤 <span>Léa</span>" in page
     assert f'hx-ws:connect="/ws/{code}?role=guest&view=html"' in page
     assert page.count('id="everywhere"') == 1
+    # The search bar takes links ("Titre, artiste ou lien YouTube…"): no
+    # separate paste button in the intro
+    assert "lien YouTube" in page and "data-paste" not in page
 
 
 def test_the_name_is_per_room_and_the_last_one_only_suggested(

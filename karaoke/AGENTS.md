@@ -17,7 +17,8 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   channels (`KARAOKE_CHANNELS`, default `karafunfr,karafun`), in parallel, then
   re-ranked (`search.rank`: word overlap + fuzzy ratio). Searching all of YouTube
   needs an explicit tap and appends " karaoke" to the query. A pasted YouTube link
-  resolves that one video. `strong: false` (no result has every query word) makes
+  resolves that one video; the search placeholder says so, and the intro has no
+  paste button (owner's choice). `strong: false` (no result has every query word) makes
   the phone offer YouTube up front.
 - **Cancelled artists** (`cancelled.py`, `CANCELLED_ARTISTS`) stay playable but are
   flagged; the phone asks for a "J'assume" confirmation. The flag is computed

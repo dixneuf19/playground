@@ -58,8 +58,6 @@ main { padding: 16px; max-width: 640px; margin: 0 auto; }
 .placeholder { text-align: center; padding: 48px 16px; color: var(--muted); }
 .placeholder .big { font-size: 2.6rem; margin-bottom: 8px; }
 .intro-search { text-align: center; color: var(--muted); padding: 32px 8px 0; }
-.intro-search .link-tip { margin-top: 28px; padding: 16px; border: 1px dashed var(--line); border-radius: 14px; }
-.intro-search .link-tip b { color: var(--text, #fff); }
 .paste-hint { font-size: .85rem; margin: 10px 0 0; }
 .skeleton { height: 74px; border-radius: var(--radius); background: linear-gradient(90deg, var(--surface) 0%, var(--surface-2) 50%, var(--surface) 100%); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
 @keyframes shimmer { to { background-position: -200% 0; } }
