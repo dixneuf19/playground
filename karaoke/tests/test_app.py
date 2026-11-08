@@ -6,6 +6,7 @@ from starlette.testclient import WebSocketTestSession
 
 from karaoke.app import create_app
 from karaoke.config import Settings
+from tests.conftest import services
 
 JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 100
 
@@ -28,7 +29,7 @@ def _state(ws: WebSocketTestSession, check: Callable[[dict[str, Any]], bool]) ->
 
 
 def _no_downloads(client: TestClient) -> None:
-    client.app.state.hub.download_videos = False  # type: ignore[attr-defined]
+    services(client).worker.download_videos = False
 
 
 def test_room_creation_requires_password(client: TestClient) -> None:
@@ -205,9 +206,9 @@ def test_photo_limit_per_uploader(client: TestClient) -> None:
 
 
 def test_reloaded_screen_gets_the_playback_position(client: TestClient) -> None:
-    hub = client.app.state.hub  # type: ignore[attr-defined]
-    store = hub.store
-    path = hub.library.path_for("abcdefghijk")
+    svc = services(client)
+    store = svc.store
+    path = svc.library.path_for("abcdefghijk")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"fake mp4")
     portal = client.portal
@@ -263,11 +264,11 @@ def test_one_leader_and_a_quick_takeover(
     cfg = make_settings()
     first, second = TestClient(create_app(cfg)), TestClient(create_app(cfg))
     with first:
-        leader = first.app.state.hub.leadership  # type: ignore[attr-defined]
+        leader = services(first).worker.leadership
         assert leader.is_leader  # the first replica up takes the lock at once
         second.__enter__()
         try:
-            follower = second.app.state.hub.leadership  # type: ignore[attr-defined]
+            follower = services(second).worker.leadership
             portal = second.portal
             assert portal is not None
             portal.call(follower.step)  # a check, as the poll loop would do
@@ -280,15 +281,15 @@ def test_one_leader_and_a_quick_takeover(
 
 
 def test_leader_downloads_a_queued_song_and_starts_it(client: TestClient) -> None:
-    hub = client.app.state.hub  # type: ignore[attr-defined]
+    svc = services(client)
 
     def fake_download(video_id: str, _worker: str, on_progress: Any) -> tuple[str, int]:
         on_progress(0.5)
-        hub.library.path_for(video_id).write_bytes(b"fake mp4")
+        svc.library.path_for(video_id).write_bytes(b"fake mp4")
         return "Song", 8
 
-    hub.library.download = fake_download
-    hub.download_videos = True
+    setattr(svc.library, "download", fake_download)  # noqa: B010
+    svc.worker.download_videos = True
     code = _room(client)
     with client.websocket_connect(f"/ws/{code}") as guest:
         guest.receive_json()

@@ -1,4 +1,4 @@
-// Shared by the display and guest pages: room socket with auto-reconnect.
+// Screen page: room socket with auto-reconnect (the phone page uses htmx).
 const ROOM_CODE = location.pathname.split("/").filter(Boolean).pop().toUpperCase();
 
 function connectRoom(role, onState, onCommand) {

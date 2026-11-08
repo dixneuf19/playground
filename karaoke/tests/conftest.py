@@ -8,15 +8,22 @@ import subprocess
 import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import cast
 
 import asyncpg
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from karaoke.app import create_app
 from karaoke.config import Settings
+from karaoke.context import Services
 
 IMAGE = "postgres:18-alpine"
+
+
+def services(client: TestClient) -> Services:
+    return cast(FastAPI, client.app).state.services
 
 
 def _wait_for(url: str, timeout: float = 30) -> None:
@@ -78,7 +85,8 @@ def make_settings(database_url: str, tmp_path: Path) -> Callable[..., Settings]:
         conn = await asyncpg.connect(database_url)
         try:
             await conn.execute(
-                "DROP TABLE IF EXISTS photos, queue_items, videos, rooms CASCADE"
+                "DROP TABLE IF EXISTS photos, queue_items, videos, rooms, "
+                "schema_migrations CASCADE"
             )
         finally:
             await conn.close()
@@ -100,5 +108,5 @@ def client(make_settings: Callable[..., Settings]) -> Iterator[TestClient]:
     )
     with TestClient(app) as c:
         # No YouTube in unit tests: downloads never start.
-        c.app.state.hub.download_videos = False
+        services(c).worker.download_videos = False
         yield c

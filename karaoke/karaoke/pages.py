@@ -1,0 +1,115 @@
+"""HTML pages, and the endpoints the htmx phone page talks to."""
+
+import json
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import HTMLResponse, Response
+from pydantic import ValidationError
+
+from karaoke.api import room_or_404
+from karaoke.cancelled import cancel_reason
+from karaoke.context import GuestName, Svc
+from karaoke.messages import Add, parse
+from karaoke.views import guest_state, render_guest_state, templates
+
+router = APIRouter()
+
+NO_CACHE = {"Cache-Control": "no-cache"}
+
+
+def page(request: Request, name: str, **context: Any) -> HTMLResponse:
+    return templates.TemplateResponse(request, name, context, headers=NO_CACHE)
+
+
+@router.get("/", response_class=HTMLResponse)
+async def index(request: Request) -> HTMLResponse:
+    return page(request, "index.html")
+
+
+@router.get("/display/{code}", response_class=HTMLResponse)
+async def display(code: str, request: Request, svc: Svc) -> HTMLResponse:
+    await room_or_404(svc, code)
+    return page(request, "display.html")
+
+
+@router.get("/r/{code}", response_class=HTMLResponse)
+async def guest(code: str, request: Request, svc: Svc, me: GuestName) -> HTMLResponse:
+    room = await svc.store.load_room(code)
+    if room is None:
+        raise HTTPException(404, "Salle introuvable")
+    return page(
+        request,
+        "guest.html",
+        **guest_state(room, me),
+        oob=False,
+        code=room.code,
+        page=await svc.searcher.find("", everywhere=False),
+        initial=True,  # the search intro, inside the page
+    )
+
+
+@router.get("/r/{code}/state", response_class=HTMLResponse)
+async def guest_fragments(code: str, svc: Svc, me: GuestName) -> HTMLResponse:
+    """The pushed fragments, on demand (after a drag held pushes back)."""
+    room = await svc.store.load_room(code)
+    if room is None:
+        raise HTTPException(404, "Salle introuvable")
+    return HTMLResponse(render_guest_state(room, me), headers=NO_CACHE)
+
+
+@router.get("/r/{code}/search", response_class=HTMLResponse)
+async def search(
+    code: str,
+    request: Request,
+    svc: Svc,
+    me: GuestName,
+    q: str = "",
+    everywhere: int = 0,
+) -> HTMLResponse:
+    room = await svc.store.load_room(code)  # only guests of a live room search
+    if room is None:
+        raise HTTPException(404, "Salle introuvable")
+    result = await svc.searcher.find(q, bool(everywhere))
+    ids = [r.video_id for r in result.results]
+    mine = [room.current, *room.queue] if room.current else room.queue
+    return templates.TemplateResponse(
+        request,
+        "_results.html",
+        {
+            "code": room.code,
+            "page": result,
+            "cached": await svc.store.cached(ids),
+            "cancelled": {
+                r.video_id: cancel_reason(r.artist or r.channel, r.title)
+                for r in result.results
+            },
+            "added": {i.video_id for i in mine if i.singer == me},
+        },
+    )
+
+
+@router.post("/r/{code}/do")
+async def act(code: str, request: Request, svc: Svc, me: GuestName) -> Response:
+    """Every button of the phone page. The new state comes back by push."""
+    code = await room_or_404(svc, code)
+    data: dict[str, Any] = dict(await request.form())
+    # Who sings or owns a photo is the phone's name, not something it says.
+    data["singer"] = data["uploader"] = me
+    try:
+        msg = parse(data)
+    except ValidationError as e:
+        raise HTTPException(422, "Requête invalide") from e
+    room = await svc.actions.handle(code, msg, from_screen=False)
+    headers = {}
+    if isinstance(msg, Add) and room is not None:
+        place = room.position_of(msg.video_id, msg.singer or "Anonyme")
+        if place is None:
+            raise HTTPException(409, "La file est pleine")
+        text = (
+            "Ajouté, c'est bientôt à toi 🎤"
+            if place <= 1
+            else f"Ajouté, position {place}"
+        )
+        headers["HX-Trigger"] = json.dumps({"toast": text})
+    return Response(status_code=204, headers=headers)

@@ -23,8 +23,9 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   flagged; the phone asks for a "J'assume" confirmation. The flag is computed
   server-side, never trusted from the phone. User-suggested cancellations: future.
 - **The screen doesn't show who sent a photo** (a product choice, not a security
-  property). Phones keep their own photo ids in localStorage to list their photos
-  still in the queue and cancel them.
+  property). A guest is known by the name in their `karaoke_name` cookie: the
+  phone page lists and cancels the pending photos uploaded under that name, and
+  tags their songs "moi". Same-name guests share them (issue #55).
 - **Photo fairness, not FIFO** (`photos.PhotoQueue`): next photo comes from the
   uploader shown least recently; never-shown uploaders first; ties by upload order.
   One photo at a time, 10 s, tilted instant-photo print with washi tape; rotating
@@ -38,15 +39,42 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
 
 | File | Role |
 |---|---|
-| `rooms.py`, `photos.py` | Pure state and logic, no I/O (Room, QueueItem, PhotoQueue). Unit-tested directly. |
-| `db.py` | `Store`: Postgres via asyncpg. Schema, `room_tx`, videos/photos tables, NOTIFY. |
-| `app.py` | FastAPI app + WebSockets. `Hub` = this replica's sockets, plus the background loops when it leads. |
+| `rooms.py`, `photos.py` | Pure state and logic, no I/O (Room, QueueItem, PhotoQueue, photo slot timing). Unit-tested directly. Methods that may do nothing return a bool. |
+| `messages.py` | Pydantic models of every phone/screen message, one per `type`. All input validation lives here. |
+| `actions.py` | `Actions.handle`: applies a message to a room inside `room_tx` (a `match` on the message class). |
+| `db.py` | `Store`: Postgres via asyncpg. `MIGRATIONS`, `room_tx`, `load_room`, videos/photos tables, NOTIFY. |
+| `hub.py` | This replica's sockets (`Client`), the LISTEN connection and the per-room push loop. |
+| `worker.py` | Leader-only background work: downloads, photo rotation, repair, pruning. Owns the `Leadership`. |
 | `leader.py` | Leader election with a Postgres advisory lock held on a dedicated connection. |
-| `search.py` | yt-dlp flat search (channels / all YouTube / single link), title parsing, ranking. |
-| `library.py` | yt-dlp download to `<data>/songs/<video_id>.mp4` (≤720p H.264 + AAC). |
+| `api.py` | JSON API, photo upload, media files, the `/ws/{code}` WebSocket. |
+| `pages.py`, `views.py` | HTML pages (Jinja) and the htmx endpoints of the phone page. |
+| `context.py` | `Services` (built once in `app.start`) and the `Svc`/`GuestName` dependencies. |
+| `search.py` | yt-dlp flat search (channels / all YouTube / single link), title parsing, ranking, `Searcher` (cache + concurrency). |
+| `library.py`, `photo_files.py` | Video files (yt-dlp download, ≤720p H.264 + AAC) and photo files on `/data`. |
 | `cancelled.py` | Cancelled artists, matched on whole normalized words. |
 | `config.py` | `Settings` from `KARAOKE_*` env vars. |
-| `static/` | Plain HTML/CSS/JS, no build step: `index.html`, `display.html`, `guest.html`, `common.js` (socket + `esc`), `app.css`. SortableJS from jsdelivr. |
+| `app.py` | Wiring only: builds the services, includes the routers. |
+| `templates/` | `guest.html` (+ `_guest_state.html` fragments, `_guest_push.html`, `_results.html`), `display.html`, `index.html`. |
+| `static/` | `guest.js`/`guest.css`, `display.js`/`display.css`, `common.js` (screen socket + `esc`), `app.css`, `vendor/` (htmx, its ws extension, idiomorph, SortableJS: pinned, version in the file name). No build step. |
+
+## Frontend
+
+- **Phone page = htmx.** The server renders it with Jinja (autoescaped) for the
+  guest in the cookie. Each `_guest_state.html` macro renders one region with
+  an id; after every change the hub renders them all (`_guest_push.html`, once
+  per guest name) and pushes the HTML over the WebSocket (`?view=html`); htmx
+  swaps each by id with idiomorph, so scroll, focus and drags survive. Buttons
+  `hx-post` to `/r/{code}/do` (form fields = a `messages` model; `singer` and
+  `uploader` always come from the cookie) and get the new state by push.
+  `hx-confirm` opens the app's own sheet; toasts come from `HX-Trigger`.
+  Search is `GET /r/{code}/search` returning `_results.html`.
+- `guest.js` only does what needs the browser: tabs, the name cookie, the
+  confirm sheet, toasts, drag and drop (pushes are held during a drag), photo
+  resizing before upload.
+- **Screen page = plain JS** (`display.js`): it is a video player state machine,
+  fed with JSON states and commands. Keep it that way.
+- Pages reference static files through `static('name')`, which appends a
+  content hash: no stale JS after a deploy.
 
 ## How multi-replica state works
 
@@ -59,10 +87,11 @@ Prod runs 2 replicas. Everything a replica knows lives in Postgres or on the sha
 2. On commit, `pg_notify('karaoke', {"room": code})` reaches every replica's
    LISTEN connection; each re-reads the snapshot (one REPEATABLE READ read) and
    pushes `{"type": "state"}` to its local sockets. One push loop per room
-   (`Hub.push_state`): pushes stay in order and bursts coalesce. Sends go to all
+   (`Hub.push_state`): pushes stay in order and bursts coalesce. JSON clients
+   (screens) share one message; htmx phones get HTML rendered once per name. Sends go to all
    sockets in parallel with a 5 s timeout; a socket that doesn't keep up is closed
-   (the page reconnects and gets the full state), so one frozen phone never holds
-   up the TV. Display commands (`play`/`pause`/`restart`/`volume`) are sent
+   (close code 1013: the page reconnects and gets the full state), so one frozen
+   phone never holds up the TV. Display commands (`play`/`pause`/`restart`/`volume`) are sent
    as `{"room", "command"}` via `tx.command()` and forwarded only to screens.
 3. **One leader runs the background work** (`leader.py`). Every replica serves
    pages and phone actions; the leader also runs photo rotation (0.5 s), the
@@ -72,8 +101,8 @@ Prod runs 2 replicas. Everything a replica knows lives in Postgres or on the sha
    retry every 5 s (TCP keepalives on that connection catch a vanished node in
    ~30 s). The first replica up takes it during startup. A new leader puts
    `downloading` videos back to `pending` and starts them over.
-4. Downloads: a follower that queues a new video only NOTIFIES
-   `{"downloads": true}` (after the song is saved in the queue); the leader's loop
+4. Downloads: a replica that queues a new video sets `tx.wake_downloads`, which
+   NOTIFIES `{"downloads": true}` on commit (after the song is saved); the leader's loop
    wakes, picks queued `pending` videos (also scans every 5 s), 2 at a time:
    `pending → downloading → ready|error`. A download writes into
    `songs/.tmp/<worker>-<id>/` and is renamed into `songs/` when complete, so the
@@ -92,22 +121,30 @@ Invariants to keep:
 
 - Never keep state only in process memory (the `downloading` set and photo-file
   deletion timers are local optimizations, not state).
-- Background work belongs on the leader (`Hub._lead`), never in a loop every
+- Background work belongs on the leader (`Worker._lead`), never in a loop every
   replica runs. Actions from phones run on any replica, inside `room_tx`.
 - Room changes from the leader and from phones meet on the room row lock
   (`room_tx`); keep it that way rather than adding other locks.
-- Mutate rooms only inside `room_tx`, with logic in `rooms.py`/`photos.py`.
+- Mutate rooms only inside `room_tx`, with logic in `rooms.py`/`photos.py`;
+  `actions.py`/`worker.py` only call those methods and set `tx.save` from their
+  result, so a no-op is neither saved nor pushed.
+- A new message = a model in `messages.py` (+ `screen_only` if needed) and a
+  `case` in `Actions._apply`. Don't parse raw dicts anywhere else.
+- Room times (`photo_until`, `position_at`) come from the app's clock
+  (`time.time()`), never from Postgres `now()`.
 - Keep NOTIFY payloads tiny (room code + optional command; Postgres caps them at
   8000 bytes). Replicas re-read state from the DB, never from the payload.
 - Screen-only messages (`ended`, `player`, `position`) are gated by `is_display`;
   commands go only to screens.
-- Schema changes go in `db.SCHEMA` and must be additive and idempotent
-  (`IF NOT EXISTS`): it runs at every startup under an advisory lock, and a rolling
-  update runs old and new code against the same schema.
-- Frontend: any server string put into `innerHTML` goes through `esc()`, or use
-  `textContent`.
-- Public site, no login: validate what phones send. Video ids must match
-  `[A-Za-z0-9_-]{11}` (`library.valid_video_id`: they become file paths and
+- Schema changes = a new entry at the end of `db.MIGRATIONS` (never edit an
+  applied one). Each runs once, recorded in `schema_migrations`, under an
+  advisory lock at startup. A rolling update runs the previous release against
+  the new schema: add things, or drop only what the previous release no longer
+  reads.
+- Frontend: render HTML in Jinja templates (autoescaped). In `display.js`, any
+  server string put into `innerHTML` goes through `esc()`, or use `textContent`.
+- Public site, no login: validate what phones send (`messages.py`). Video ids
+  must match `[A-Za-z0-9_-]{11}` (`library.VIDEO_ID`: they become file paths and
   URLs); thumbnails are built server-side; queue capped at 200; WebSocket messages
   at 64 KiB (`__main__.py`); photos streamed to `/data/tmp` with a running size
   check (10 MB), then moved in; 30 pending photos per name, 300 per room.
@@ -117,17 +154,23 @@ Invariants to keep:
 ## Protocol
 
 - REST: `/healthz`, `/readyz` (DB ping), `POST /api/rooms`, `GET /api/rooms/{code}`,
-  `/api/rooms/{code}/qr.svg`, `/api/search?room=&q=&everywhere=`, `POST
-  /api/rooms/{code}/photos?uploader=` (raw body, JPEG/PNG/WebP by magic bytes),
-  `/photos/{code}/{id}`, `/media/{video_id}.mp4`.
-- WebSocket `/ws/{code}?role=display|guest`. Phone → server: `add`, `remove`,
-  `move`, `skip`, `play`, `pause`, `restart`, `volume`, `retry`, `photo_skip`,
-  `photo_remove`. Screen only: `ended`, `player`, `position`. Server → client:
-  `state` (full snapshot) and `command`. Close code 4404 = room gone.
+  `/api/rooms/{code}/qr.svg`, `/api/search?room=&q=&everywhere=` (JSON, for
+  phone pages opened before the htmx one), `POST /api/rooms/{code}/photos`
+  (raw body, JPEG/PNG/WebP by magic bytes; uploader = `?uploader=` or the
+  cookie), `/photos/{code}/{id}`, `/media/{video_id}.mp4`.
+- Pages: `/`, `/display/{code}`, `/r/{code}`. htmx: `GET /r/{code}/search`,
+  `GET /r/{code}/state` (the pushed fragments, on demand), `POST /r/{code}/do`
+  (any phone message as form fields; 204, maybe `HX-Trigger: {"toast": …}`).
+- WebSocket `/ws/{code}?role=display|guest&view=json|html`. Messages
+  (`messages.py`) phone → server: `add`, `remove`, `move`, `skip`, `play`,
+  `pause`, `restart`, `volume`, `retry`, `photo_skip`, `photo_remove`. Screen
+  only: `ended`, `player`, `position`. Server → JSON clients: `state` (full
+  snapshot) and `command` (screens only); → `view=html`: HTML fragments. Close
+  codes: 4404 room gone, 1013 dropped for being slow (reconnect).
 - Data on `/data` (owned by uid 1000, the container user): `songs/<video_id>.mp4`,
   `songs/.tmp/` (downloads in progress), `photos/<CODE>/<photo_id>`, `tmp/`
   (uploads in progress).
-- Tables: `rooms`, `queue_items`, `videos`, `photos`.
+- Tables: `rooms`, `queue_items`, `videos`, `photos`, `schema_migrations`.
 
 ## Commands (from `karaoke/`)
 
@@ -149,11 +192,12 @@ anyone can create a room), `PORT`, `LOG_LEVEL`.
 - Unit tests need Postgres: `KARAOKE_TEST_DATABASE_URL` (CI uses a service
   container), otherwise `conftest.py` starts a throwaway `postgres:18-alpine` with
   docker. Tables are dropped before each test.
-- The `client` fixture sets `hub.download_videos = False`: unit tests never reach
+- The `client` fixture sets `services(c).worker.download_videos = False`: unit tests never reach
   YouTube (`test_leader_downloads_a_queued_song_and_starts_it` fakes the
   download instead). `test_one_leader_and_a_quick_takeover` covers the election.
-- Put logic in `rooms.py`/`photos.py`/`search.py` and test it there; test wiring
-  in `test_app.py` through HTTP and WebSockets. `test_two_replicas_share_rooms`
+- Put logic in `rooms.py`/`photos.py`/`search.py` and test it there; messages in
+  `test_messages.py`; wiring in `test_app.py` (JSON/WebSocket) and
+  `test_pages.py` (htmx page: set the `karaoke_name` cookie URL-encoded). `test_two_replicas_share_rooms`
   runs two app instances on one database: extend it for cross-replica behaviour.
 - `-m integration` hits YouTube; run it after touching search or download code.
 

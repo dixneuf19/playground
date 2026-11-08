@@ -27,7 +27,7 @@ cd soundhoard && uv run pytest -m integration -v
 
 ### karaoke
 
-Karaoke party web app: a big screen creates a room and plays the queue, phones join by QR code. FastAPI + WebSockets, Postgres for shared state (runs 2 replicas), plain HTML/JS frontend in `karaoke/static/` (no build step), yt-dlp for search (KaraFun YouTube channels first) and downloads. **Read `karaoke/AGENTS.md` before changing it.**
+Karaoke party web app: a big screen creates a room and plays the queue, phones join by QR code. FastAPI + WebSockets, Postgres for shared state (runs 2 replicas), Jinja + htmx phone page, plain JS screen page (no build step), yt-dlp for search (KaraFun YouTube channels first) and downloads. **Read `karaoke/AGENTS.md` before changing it.**
 
 **Common commands (run from `karaoke/`):**
 

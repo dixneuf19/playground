@@ -1,0 +1,76 @@
+{#
+  Search results, swapped into #results by the search form. Also resets the
+  form's hidden `everywhere` field: once on all of YouTube, the next search
+  stays there until the guest goes back to the catalogue or leaves the tab.
+#}
+{% set search = "/r/" ~ code ~ "/search" %}
+{% if not initial %}
+<input type="hidden" id="everywhere" name="everywhere" value="{{ 1 if page.everywhere else 0 }}" hx-swap-oob="true">
+{% endif %}
+
+{% macro youtube_offer(lead, label, primary) %}
+<p class="muted lead-small">{{ lead }}</p>
+<button class="btn {{ 'btn-primary' if primary else 'btn-ghost' }}"
+  hx-get="{{ search }}?everywhere=1" hx-include="#q" hx-target="#results">{{ label }}</button>
+<p class="muted paste-hint">ou colle directement le lien de la vidéo 🔗</p>
+{% endmacro %}
+
+{% if not page.query %}
+<div class="intro-search">
+  <div class="big">🎶</div>
+  Cherche un titre ou un artiste dans le catalogue karaoké.
+  <div class="link-tip">
+    🔗 <b>Tu as déjà ta vidéo ?</b><br>
+    Colle son lien YouTube dans la barre de recherche.
+    <div style="margin-top:12px"><button class="btn btn-ghost" data-paste>📋 Coller un lien</button></div>
+  </div>
+</div>
+{% else %}
+<div class="scope muted">
+  {% if page.everywhere %}
+  <span>Résultats YouTube (non vérifiés)</span>
+  <button hx-get="{{ search }}?everywhere=0" hx-include="#q" hx-target="#results">← Catalogue karaoké</button>
+  {% else %}
+  <span>Catalogue karaoké</span>
+  {% endif %}
+</div>
+
+{% if not page.strong %}
+<div class="more top">{{ youtube_offer("Pas trouvé dans le catalogue karaoké.", "Chercher sur YouTube", True) }}</div>
+{% endif %}
+
+<div class="list">
+  {% for r in page.results %}
+  {% set done = r.video_id in added %}
+  <div class="card song">
+    <img src="{{ r.thumbnail }}" alt="" loading="lazy">
+    <div class="meta">
+      <div class="t">{{ r.title }}</div>
+      <div class="a ellipsis">{{ r.artist or r.channel }}</div>
+      <div class="tags">
+        {% if cancelled[r.video_id] %}<span class="tag tag-cancel">🚫 Cancel</span>{% endif %}
+        {% if not r.curated %}<span class="tag tag-yt">YouTube</span>{% endif %}
+        {% if r.video_id in cached %}<span class="tag tag-ready">Prêt</span>{% endif %}
+        {% if r.duration %}<span class="tag">{{ r.duration|duration }}</span>{% endif %}
+      </div>
+    </div>
+    <button class="add{{ ' done' if done }}" aria-label="Ajouter"
+      hx-post="/r/{{ code }}/do" hx-swap="none"
+      hx-vals='{{ {"type": "add", "video_id": r.video_id, "title": r.title, "artist": r.artist or r.channel}|tojson }}'
+      {% if cancelled[r.video_id] %}
+      hx-confirm="{{ cancelled[r.video_id] }} Tu assumes de la chanter devant tout le monde ?"
+      data-confirm-title="🚫 Artiste cancel" data-confirm-yes="J'assume"
+      {% endif %}
+      data-added>{{ "✓" if done else "+" }}</button>
+  </div>
+  {% endfor %}
+</div>
+
+{% if not page.results and page.strong %}
+<div class="placeholder"><div class="big">🤷</div>Rien trouvé{{ "" if page.everywhere else " dans le catalogue karaoké" }}.</div>
+{% endif %}
+
+{% if page.strong and not page.everywhere %}
+<div class="more">{{ youtube_offer("Pas la bonne chanson ?", "Chercher sur tout YouTube", False) }}</div>
+{% endif %}
+{% endif %}
