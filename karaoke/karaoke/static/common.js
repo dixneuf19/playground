@@ -1,4 +1,5 @@
 // Screen page: room socket with auto-reconnect (the phone page uses htmx).
+/* exported connectRoom, esc */
 const ROOM_CODE = location.pathname.split("/").filter(Boolean).pop().toUpperCase();
 
 function connectRoom(role, onState, onCommand) {

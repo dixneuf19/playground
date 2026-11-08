@@ -162,6 +162,12 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   resizing before upload.
 - **Screen page = plain JS** (`display.js`): it is a video player state machine,
   fed with JSON states and commands. Keep it that way.
+- `make check-format` also runs ESLint on `static/*.js` (`eslint.config.js`),
+  through deno with `npm:` imports: no `package.json`, no `node_modules`. It
+  catches undefined names (a call to a removed function broke reactions in
+  #76), unused variables and syntax errors. A name shared across files or
+  loaded from a CDN is declared per file in the config; `common.js` lists
+  what it shares in its `/* exported */` comment.
 - Pages reference static files through `static('name')`, which appends a
   content hash: no stale JS after a deploy.
 - CDN libraries are pinned to an exact version with a `sha384` integrity hash.
