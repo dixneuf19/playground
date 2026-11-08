@@ -191,8 +191,6 @@ function flushReactions() {
 document.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-react]");
   if (!btn) return;
-  // Each name has its own throttle: nameless guests would all share one.
-  if (!cookieName()) { askName(); return; }
   const kind = btn.dataset.react;
   reacting.set(kind, (reacting.get(kind) || 0) + 1);
   reactTimer ??= setTimeout(flushReactions, REACT_EVERY);

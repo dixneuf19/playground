@@ -58,8 +58,8 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
 - **Reactions** (`reactions.py`, under the player in the queue tab, outside the
   pushed fragments): a fixed palette of 8 emoji that float up the TV, plus two
   effects (🎉 confetti, 💖 falling hearts). Ten emoji-only buttons in one grid,
-  5 per row; the effects get a pink tint. Anonymous, like photos, but they need
-  a name. Spamming is part of the fun: the phone groups
+  5 per row; the effects get a pink tint. Anonymous, like photos, and need no
+  name. Spamming is part of the fun: the phone groups
   quick taps (≤10 per message every 250 ms); per replica, the server throttles
   each phone, keyed on its token so renaming gives no fresh bucket (token
   bucket, 8/s, burst 30, an effect costs 5), and each room whoever sends
