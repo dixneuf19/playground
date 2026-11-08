@@ -215,14 +215,18 @@ def test_search_intro_shows_popular_songs(client: TestClient) -> None:
     portal = client.portal
     assert portal is not None
     portal.call(svc.store.video_status, VID)
-    portal.call(svc.store.finish_download, VID, True, "Song", 1)
+    portal.call(
+        svc.store.finish_download, VID, True, "Les lacs du Connemara - Michel Sardou", 1
+    )
     code = _room(client)
     _as(client, code, "Léa")
     assert "Les plus chantées" not in client.get(f"/r/{code}").text
 
     # Ready, so it starts at once: that's a play
-    add = {"type": "add", "video_id": VID, "title": "Les lacs du Connemara"}
-    client.post(f"/r/{code}/do", data={**add, "artist": "Michel Sardou"})
+    add = {"type": "add", "video_id": VID, "title": "Phone text", "artist": "x"}
+    client.post(f"/r/{code}/do", data=add)
+    # Other rooms see the YouTube title, never what a phone sent
+    assert "Phone text" not in client.get(f"/r/{code}/search").text
     for html in (client.get(f"/r/{code}").text, client.get(f"/r/{code}/search").text):
         assert "Les plus chantées" in html
         assert "Les lacs du Connemara" in html

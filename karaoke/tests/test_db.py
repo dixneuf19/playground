@@ -105,13 +105,18 @@ def test_migrations_upgrade_a_database_from_before_they_were_numbered(
 
 
 async def _sing(store: Store, code: str, video_id: str, title: str) -> None:
+    """Download the video under that YouTube title, then start it in the room
+    with some other title from the phone."""
+    await store.video_status(video_id)
+    await store.start_download(video_id)
+    await store.finish_download(video_id, ok=True, title=title, size=1)
     async with store.room_tx(code) as tx:
         assert tx is not None
         tx.room.add(
             QueueItem(
                 video_id=video_id,
-                title=title,
-                artist="a",
+                title="phone text",
+                artist="phone text",
                 singer="s",
                 thumbnail="",
                 status="ready",
@@ -120,14 +125,15 @@ async def _sing(store: Store, code: str, video_id: str, title: str) -> None:
         tx.room.advance()
 
 
-def test_popular_songs_count_plays_across_rooms(
+def test_popular_songs_count_rooms_with_the_youtube_title(
     make_settings: Callable[..., Settings],
 ) -> None:
     async def test(store: Store) -> None:
         first, second = await store.create_room(), await store.create_room()
         await _sing(store, first, VID, "old title")
-        await _sing(store, second, VID, "Connemara")
+        await _sing(store, second, VID, "Connemara - Sardou")
         await _sing(store, first, "bbbbbbbbbbb", "B")
+        await _sing(store, first, "bbbbbbbbbbb", "B")  # add + skip: same room
         await _sing(store, second, "ccccccccccc", "C")
         # A save that doesn't start a new song is not a play
         async with store.room_tx(first) as tx:
@@ -139,7 +145,8 @@ def test_popular_songs_count_plays_across_rooms(
             ("ccccccccccc", 1),  # ties: most recent first
             ("bbbbbbbbbbb", 1),
         ]
-        assert popular[0].title == "Connemara"  # from the latest play
+        assert (popular[0].title, popular[0].artist) == ("Connemara", "Sardou")
+        assert popular[0].thumbnail.endswith(f"/{VID}/mqdefault.jpg")
 
         await store.pool.execute(
             "UPDATE plays SET played_at = now() - interval '31 days' "

@@ -39,9 +39,12 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   reloaded screen resumes mid-song with a 3 s rewind and skips the "Au tour de…"
   interstitial (6 s, only for fresh songs).
 - **Popular songs as inspiration**: before any search, the phone lists the 20
-  songs most played over the last 30 days across all rooms (ties: most recent),
-  with the usual one-tap add. A play is recorded in `plays` when a song becomes
-  current (`Store._save`), skipped or not; the leader's prune drops older rows.
+  songs sung in the most rooms over the last 30 days (ties: most recent), with
+  the usual one-tap add. A play is recorded in `plays` when a song becomes
+  current (`Store._save`), skipped or not; a room counts once per song, so
+  add + skip loops don't climb. Titles shown to every room come from YouTube
+  (`videos.title`, artist via `search.split_title`), never from a phone's
+  `add`. The leader's prune drops rows older than 30 days.
 - Out of scope: lights; scraping or pirating KaraFun's paid catalogue.
 
 ## Code map (`karaoke/karaoke/`)

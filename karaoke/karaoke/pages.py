@@ -28,16 +28,15 @@ async def results(svc: Svc, room: Room, me: str, found: SearchPage) -> dict[str,
     """What `_results.html` needs: the search results, or before any search
     the songs popular across rooms."""
     popular = [] if found.query else await svc.store.popular()
-    songs = [*found.results, *popular]
+    songs = [(r.video_id, r.artist or r.channel, r.title) for r in found.results]
+    songs += [(p.video_id, p.artist, p.title) for p in popular]
     mine = [room.current, *room.queue] if room.current else room.queue
     return {
         "code": room.code,
         "page": found,
         "popular": popular,
-        "cached": await svc.store.cached([s.video_id for s in songs]),
-        "cancelled": {
-            s.video_id: cancel_reason(s.artist or s.channel, s.title) for s in songs
-        },
+        "cached": await svc.store.cached([vid for vid, _, _ in songs]),
+        "cancelled": {vid: cancel_reason(a, t) for vid, a, t in songs},
         "added": {i.video_id for i in mine if i.singer == me},
     }
 
