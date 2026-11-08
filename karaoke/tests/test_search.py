@@ -44,8 +44,8 @@ from karaoke.search import (
         ),
         ("Toto - Africa (Karaoke Version)", ("Africa", "Toto")),
         (
-            "Gloria Gaynor - I Will Survive (Karaoke with Guide Vocal)",
-            ("I Will Survive (Karaoke with Guide Vocal)", "Gloria Gaynor"),
+            "Backstreet Boys - I Want It That Way (Piano Karaoke)",
+            ("I Want It That Way (Piano Karaoke)", "Backstreet Boys"),
         ),
         (
             "Drake, Don Toliver - Solar Eclipse (Karaoke Version)",
@@ -64,6 +64,8 @@ def test_split_title(raw: str, expected: tuple[str, str]) -> None:
         ("Toto - Africa (Karaoke Version)", True),
         ("Karaoké Germaine - Renaud *", True),
         ("Renaud - Ma gonzesse (1975) [BDFab karaoke]", True),
+        ("Backstreet Boys - I Want It That Way (Piano Karaoke)", True),
+        ("Gloria Gaynor - I Will Survive (Karaoke with Guide Vocal)", False),
         ("Drake, Don Toliver - Solar Eclipse (Instrumental Visualizer)", False),
         ("stromae | tous les mêmes | lyrics | paroles", False),
     ],
@@ -99,6 +101,16 @@ def test_rank_puts_exact_match_first_and_dedupes() -> None:
     ranked = rank("les lacs du connemara", results)
     assert [r.video_id for r in ranked] == ["c", "a", "b"] or ranked[0].video_id == "c"
     assert len(ranked) == 3
+
+
+def test_rank_keeps_one_video_per_song_from_the_first_channel() -> None:
+    results = [
+        _result("k", "Voyage voyage", "Desireless"),  # KaraFun France
+        _result("b", "Voyage Voyage", "Desireless"),  # BDFab, same song
+        _result("v", "Voyage voyage (Remix)", "Desireless"),  # another version
+    ]
+    ranked = rank("voyage voyage", results)
+    assert [r.video_id for r in ranked] == ["k", "v"]
 
 
 def test_rank_matches_artist_and_title() -> None:

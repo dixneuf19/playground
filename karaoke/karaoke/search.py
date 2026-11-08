@@ -72,8 +72,10 @@ def split_title(raw: str) -> tuple[str, str]:
 
 
 def is_karaoke(raw: str) -> bool:
-    """Curated channels also post compilations without lyrics, teasers, etc."""
-    return "karaok" in normalize(raw).replace(" ", "")
+    """Curated channels also post compilations without lyrics, teasers, and
+    versions that keep the singer's voice ("Karaoke with Guide Vocal")."""
+    text = normalize(raw)
+    return "karaok" in text.replace(" ", "") and "guide vocal" not in text
 
 
 def normalize(text: str) -> str:
@@ -111,11 +113,14 @@ def video_id_from_url(text: str) -> str | None:
 
 
 def rank(query: str, results: list[SearchResult]) -> list[SearchResult]:
-    seen: set[str] = set()
+    """Best match first. A song several channels have keeps the video of the
+    first channel in `results` order (KARAOKE_CHANNELS order)."""
+    seen: set[str | tuple[str, str]] = set()
     unique = []
     for r in results:
-        if r.video_id not in seen:
-            seen.add(r.video_id)
+        song = (normalize(r.title), normalize(r.artist))
+        if r.video_id not in seen and song not in seen:
+            seen.update((r.video_id, song))
             unique.append(r)
     return sorted(unique, key=lambda r: score(query, r), reverse=True)
 
