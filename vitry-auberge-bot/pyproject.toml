@@ -32,3 +32,6 @@ ignore = ["E501"]
 
 [tool.ty.src]
 include = ["vitry_auberge_bot"]
+
+[tool.uv]
+exclude-newer = "3 days"
