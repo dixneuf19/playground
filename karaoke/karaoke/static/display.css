@@ -125,6 +125,14 @@ body.playing { cursor: none; }
 #photo.center { inset: 0; display: grid; place-items: center; background: rgba(12, 7, 24, 0.75); }
 #photo.center img { max-width: 64vw; max-height: 66vh; }
 
+/* --- reactions from phones (anonymous) ------------------------------ */
+/* Above the photo and the "your turn" screen, below the start gate. */
+#fx { position: fixed; inset: 0; z-index: 15; pointer-events: none; overflow: hidden; }
+#fx .particle { position: absolute; line-height: 1; will-change: transform, opacity; }
+#fx .emoji { bottom: 0; filter: drop-shadow(0 0.1em 0.25em rgba(0, 0, 0, 0.45)); }
+#fx .fall { top: 0; }
+#fx .confetti { width: 0.8vw; height: 1.5vw; border-radius: 0.15vw; }
+
 #offline {
   position: fixed; top: 1em; left: 50%; transform: translateX(-50%); z-index: 30;
   background: var(--red); color: white; padding: 0.4em 1em; border-radius: 999px; font-weight: 600;

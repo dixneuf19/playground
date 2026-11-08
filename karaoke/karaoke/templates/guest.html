@@ -38,6 +38,20 @@
 
     <section class="view" id="view-queue">
       {{ state.player() }}
+      {# Not pushed: never redrawn under a finger that spams it. #}
+      <div class="reactions" id="reactions" role="group" aria-label="Réactions sur le grand écran">
+        <div class="palette">
+          {% for kind, emoji in reactions.items() if kind not in effects %}
+          <button class="react" data-react="{{ kind }}" data-emoji="{{ emoji }}" aria-label="Envoyer {{ emoji }}">{{ emoji }}</button>
+          {% endfor %}
+        </div>
+        <div class="palette effects">
+          {% set labels = {"confetti": "Confettis", "hearts": "Pluie de cœurs"} %}
+          {% for kind in effects|sort %}
+          <button class="react effect" data-react="{{ kind }}" data-emoji="{{ reactions[kind] }}" aria-label="{{ labels[kind] }}">{{ reactions[kind] }} {{ labels[kind] }}</button>
+          {% endfor %}
+        </div>
+      </div>
       {{ state.queue_panel() }}
     </section>
 

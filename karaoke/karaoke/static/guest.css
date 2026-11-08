@@ -91,6 +91,18 @@ main { padding: 16px; max-width: 640px; margin: 0 auto; }
 .vol { display: flex; align-items: center; gap: 10px; margin-top: 8px; color: var(--muted); }
 input[type=range] { flex: 1; min-width: 0; accent-color: var(--pink); height: 28px; }
 
+/* reactions on the big screen: compact, between the player and the queue */
+.reactions { margin: 12px 0 18px; }
+.palette { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+.palette.effects { grid-template-columns: 1fr 1fr; margin-top: 6px; }
+.react { position: relative; height: 42px; min-width: 0; border-radius: 12px; background: var(--surface-2); font-size: 1.35rem;
+  touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.react.effect { height: 36px; font-size: 0.9rem; font-weight: 700; background: rgba(255, 61, 139, 0.12); border: 1.5px solid rgba(255, 61, 139, 0.4); }
+.react:active { transform: scale(0.9); }
+.react .puff { position: absolute; left: 50%; top: 0; pointer-events: none; font-size: 1.4rem;
+  transform: translate(-50%, 0); animation: puff 0.7s ease-out forwards; }
+@keyframes puff { to { transform: translate(-50%, -50px) scale(1.4); opacity: 0; } }
+
 /* photos */
 .intro { margin: 4px 2px 16px; font-size: .95rem; }
 .pick { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;

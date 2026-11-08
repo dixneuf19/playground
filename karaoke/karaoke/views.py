@@ -12,6 +12,7 @@ from typing import Any, cast
 from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from karaoke.reactions import EFFECTS, EMOJI
 from karaoke.rooms import Room
 
 HERE = Path(__file__).parent
@@ -42,7 +43,7 @@ def duration(seconds: int | None) -> str:
 
 
 # Jinja types its globals and filters too narrowly for plain functions.
-cast(Any, env.globals)["static"] = static_url
+cast(Any, env.globals).update(static=static_url, reactions=EMOJI, effects=EFFECTS)
 cast(Any, env.filters).update(plural=plural, duration=duration)
 
 

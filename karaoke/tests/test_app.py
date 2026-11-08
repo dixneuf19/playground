@@ -6,7 +6,8 @@ from starlette.testclient import WebSocketTestSession
 
 from karaoke.app import create_app
 from karaoke.config import Settings
-from tests.conftest import services
+from karaoke.reactions import BURST
+from tests.conftest import freeze_reactions, services
 
 JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 100
 
@@ -141,6 +142,43 @@ def test_two_replicas_share_rooms(make_settings: Callable[..., Settings]) -> Non
             cmd = _until(screen_on_b, lambda m: m["type"] == "command")
             assert cmd["action"] == "volume"
             assert abs(cmd["value"] - 0.4) < 1e-6
+
+            guest_on_a.send_json({"type": "react", "kind": "clap"})
+            cmd = _until(screen_on_b, lambda m: m["type"] == "command")
+            assert cmd == {
+                "type": "command",
+                "action": "react",
+                "emoji": "👏",
+                "count": 1,
+            }
+
+
+def test_reactions_reach_screens_only_and_are_throttled_per_socket(
+    client: TestClient,
+) -> None:
+    freeze_reactions(client)
+    code = _room(client)
+    with (
+        client.websocket_connect(f"/ws/{code}?role=display") as screen,
+        client.websocket_connect(f"/ws/{code}") as guest,
+    ):
+        screen.receive_json()
+        guest.receive_json()
+        for _ in range(5):  # a forged sender changes nothing: the socket is the key
+            guest.send_json(
+                {"type": "react", "kind": "fire", "count": 10, "sender": "x"}
+            )
+        guest.send_json({"type": "volume", "value": 0.5})  # NOTIFYs keep their order
+        fire = 0
+        while (cmd := _until(screen, lambda m: m["type"] == "command"))["action"] == (
+            "react"
+        ):
+            assert cmd["emoji"] == "🔥"
+            fire += cmd["count"]
+        assert cmd["action"] == "volume"
+        assert fire == BURST
+        # the guest socket gets the volume's state push, never the commands
+        assert guest.receive_json()["type"] == "state"
 
 
 def test_media_404_when_not_cached(client: TestClient) -> None:

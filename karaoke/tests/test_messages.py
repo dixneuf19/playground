@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from karaoke.messages import Add, Ended, Move, Volume, parse
+from karaoke.messages import Add, Ended, Move, React, Volume, parse
 
 
 def test_add_trims_free_text_and_ignores_extra_fields() -> None:
@@ -32,6 +32,29 @@ def test_names_never_end_with_a_space_after_cutting() -> None:
     msg = parse({"type": "add", "video_id": "abcdefghijk", "singer": "x" * 39 + " y"})
     assert isinstance(msg, Add)
     assert msg.singer == "x" * 39
+
+
+def test_react_takes_a_known_kind_and_a_small_count() -> None:
+    msg = parse({"type": "react", "kind": "fire", "count": "3"})
+    assert isinstance(msg, React)
+    assert (msg.kind, msg.count) == ("fire", 3)
+    assert parse({"type": "react", "kind": "confetti"}) == React(
+        type="react", kind="confetti", count=1
+    )
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"kind": "<script>"},
+        {"kind": "🔥"},
+        {"kind": "fire", "count": 0},
+        {"kind": "fire", "count": 11},
+    ],
+)
+def test_react_rejects_anything_else(data: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        parse({"type": "react", **data})
 
 
 def test_form_strings_are_coerced() -> None:

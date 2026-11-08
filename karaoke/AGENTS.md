@@ -35,6 +35,15 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   uploader shown least recently; never-shown uploaders first; ties by upload order.
   One photo at a time, 10 s, tilted instant-photo print with washi tape; rotating
   corners during a song, centred between songs.
+- **Reactions** (`reactions.py`, under the player in the queue tab, outside the
+  pushed fragments): a fixed palette of 8 emoji that float up the TV, plus two
+  effects (🎉 confetti, 💖 falling hearts). Anonymous, like photos, but they need
+  a name (one throttle per name). Spamming is part of the fun: the phone groups
+  quick taps (≤10 per message every 250 ms); per replica, the server throttles
+  each sender (token bucket, 8/s, burst 30, an effect costs 5) and each room
+  whoever sends (emoji 40/s burst 80, effects 2/s burst 4), so rotating names
+  can't flood the NOTIFYs; the screen caps live particles (80 emoji, 200 with
+  effects).
 - **Resume after a screen reload**: the screen reports its position every 5 s; a
   reloaded screen resumes mid-song with a 3 s rewind and skips the "Au tour de…"
   interstitial (6 s, only for fresh songs).
@@ -64,6 +73,7 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
 | `search.py` | yt-dlp flat search (channels / all YouTube / single link), title parsing, ranking, `Searcher` (cache + concurrency). |
 | `library.py`, `photo_files.py` | Video files (yt-dlp download, ≤720p H.264 + AAC) and photo files on `/data`. |
 | `cancelled.py` | Cancelled artists, matched on whole normalized words. |
+| `reactions.py` | Reaction palette (`Kind`, `EMOJI`, `EFFECTS`), the per-sender `RateLimit` and the screen command for a reaction. |
 | `config.py` | `Settings` from `KARAOKE_*` env vars. |
 | `app.py` | Wiring only: builds the services, includes the routers. |
 | `templates/` | `guest.html` (+ `_guest_state.html` fragments, `_guest_push.html`, `_results.html`), `display.html`, `index.html`. |
@@ -115,6 +125,8 @@ Prod runs 2 replicas. Everything a replica knows lives in Postgres or on the sha
    (close code 1013: the page reconnects and gets the full state), so one frozen
    phone never holds up the TV. Display commands (`play`/`pause`/`restart`/`volume`) are sent
    as `{"room", "command"}` via `tx.command()` and forwarded only to screens.
+   Reactions are commands too, but outside any transaction (`Store.notify_command`):
+   no lock, no DB state, nothing replayed to a screen that reconnects.
 3. **One leader runs the background work** (`leader.py`). Every replica serves
    pages and phone actions; the leader also runs photo rotation (0.5 s), the
    download loop, a repair pass (15 s) and pruning (10 min). Leadership is a
@@ -141,8 +153,9 @@ Prod runs 2 replicas. Everything a replica knows lives in Postgres or on the sha
 
 Invariants to keep:
 
-- Never keep state only in process memory (the `downloading` set and photo-file
-  deletion timers are local optimizations, not state).
+- Never keep state only in process memory (the `downloading` set, photo-file
+  deletion timers and the reaction throttle are local optimizations, not state;
+  the throttle is per replica, so a sender may get up to twice the rate).
 - Background work belongs on the leader (`Worker._lead`), never in a loop every
   replica runs. Actions from phones run on any replica, inside `room_tx`.
 - Room changes from the leader and from phones meet on the room row lock
@@ -185,9 +198,12 @@ Invariants to keep:
   (any phone message as form fields; 204, maybe `HX-Trigger: {"toast": …}`).
 - WebSocket `/ws/{code}?role=display|guest&view=json|html`. Messages
   (`messages.py`) phone → server: `add`, `remove`, `move`, `skip`, `play`,
-  `pause`, `restart`, `volume`, `retry`, `photo_skip`, `photo_remove`. Screen
+  `pause`, `restart`, `volume`, `retry`, `photo_skip`, `photo_remove`, `react`
+  (`kind`, `count` 1-10; its `sender`, the throttle key, is set by the server:
+  the socket, or the name cookie on `/r/{code}/do`). Screen
   only: `ended`, `player`, `position`. Server → JSON clients: `state` (full
-  snapshot) and `command` (screens only); → `view=html`: HTML fragments. Close
+  snapshot) and `command` (screens only; `react` carries `emoji` + `count` or
+  `effect`); → `view=html`: HTML fragments. Close
   codes: 4404 room gone, 1013 dropped for being slow (reconnect).
 - Data on `/data` (owned by uid 1000, the container user): `songs/<video_id>.mp4`,
   `songs/.tmp/` (downloads in progress), `photos/<CODE>/<photo_id>`, `tmp/`
