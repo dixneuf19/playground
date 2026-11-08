@@ -132,7 +132,9 @@ async def upload_photo(
     code: str, request: Request, svc: Svc, name: GuestName, uploader: str = ""
 ) -> dict[str, str]:
     code = await room_or_404(svc, code)
-    uploader = uploader.strip()[:40] or name or "Anonyme"
+    # The name confirmed for the room wins; `?uploader=` is for phone pages
+    # opened before the htmx one (no room cookie).
+    uploader = name or uploader.strip()[:40] or "Anonyme"
     if int(request.headers.get("content-length") or 0) > MAX_PHOTO_BYTES:
         raise HTTPException(413, "Photo trop lourde")
     photo_id = uuid.uuid4().hex[:12]

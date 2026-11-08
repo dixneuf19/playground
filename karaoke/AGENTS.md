@@ -202,7 +202,7 @@ anyone can create a room), `PORT`, `LOG_LEVEL`.
   download instead). `test_one_leader_and_a_quick_takeover` covers the election.
 - Put logic in `rooms.py`/`photos.py`/`search.py` and test it there; messages in
   `test_messages.py`; wiring in `test_app.py` (JSON/WebSocket) and
-  `test_pages.py` (htmx page: set the `karaoke_name` cookie URL-encoded). `test_two_replicas_share_rooms`
+  `test_pages.py` (htmx page: set the `karaoke_name_<CODE>` cookie URL-encoded). `test_two_replicas_share_rooms`
   runs two app instances on one database: extend it for cross-replica behaviour.
 - `-m integration` hits YouTube; run it after touching search or download code.
 

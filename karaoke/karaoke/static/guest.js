@@ -23,6 +23,7 @@ function saveName(name) {
   const value = encodeURIComponent(name);
   document.cookie = `${NAME_COOKIE}=${value}; path=/; max-age=${ROOM_COOKIE_AGE}; samesite=lax`;
   document.cookie = `${LAST_NAME_COOKIE}=${value}; path=/; max-age=31536000; samesite=lax`;
+  localStorage.removeItem("karaoke.name"); // the pre-cookie name, now superseded
 }
 // Phones that picked a name before cookies: suggest it, still to confirm.
 const legacyName = localStorage.getItem("karaoke.name");
@@ -33,7 +34,8 @@ function askName() {
 }
 $("name-form").onsubmit = (e) => {
   e.preventDefault();
-  const name = $("name-input").value.trim().slice(0, 40);
+  // By code point, like the server: never splits an emoji.
+  const name = [...$("name-input").value.trim()].slice(0, 40).join("");
   if (!name) return;
   saveName(name);
   location.reload(); // the server renders "moi", my photos… for this name

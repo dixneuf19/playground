@@ -51,6 +51,28 @@ def test_the_name_is_per_room_and_the_last_one_only_suggested(
     assert room["queue"][0]["singer"] == "Anonyme"
 
 
+def test_photos_belong_to_the_name_confirmed_in_that_room(
+    client: TestClient,
+) -> None:
+    first, second = _room(client), _room(client)
+    _as(client, first, "Léa")
+    client.cookies.set("karaoke_name", quote("Léa"))  # last name used
+    # The room cookie beats a forged ?uploader=
+    client.post(f"/api/rooms/{first}/photos?uploader=Tom", content=JPEG)
+    waiting = client.post(
+        f"/api/rooms/{first}/photos?uploader=Tom", content=JPEG
+    ).json()["id"]
+    # Same room through a lowercase URL: still Léa's
+    assert f'id="ph-{waiting}"' in client.get(f"/r/{first.lower()}/state").text
+    # Not confirmed in the second room: neither cookie gives her rights there
+    client.post(f"/api/rooms/{second}/photos", content=JPEG)
+    theirs = client.post(f"/api/rooms/{second}/photos", content=JPEG).json()["id"]
+    assert theirs not in client.get(f"/r/{second}/state").text
+    client.post(f"/r/{second}/do", data={"type": "photo_remove", "photo_id": theirs})
+    _as(client, second, "Anonyme")
+    assert f'id="ph-{theirs}"' in client.get(f"/r/{second}/state").text
+
+
 def test_add_takes_the_singer_from_the_cookie(client: TestClient) -> None:
     code = _room(client)
     res = _as(client, code, "Léa").post(
