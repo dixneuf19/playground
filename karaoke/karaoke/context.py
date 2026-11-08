@@ -12,6 +12,7 @@ from karaoke.config import Settings
 from karaoke.db import Store
 from karaoke.hub import Hub
 from karaoke.library import Library
+from karaoke.messages import clean_text
 from karaoke.photo_files import PhotoFiles
 from karaoke.search import Searcher
 from karaoke.worker import Worker
@@ -27,7 +28,8 @@ def room_cookie(code: str) -> str:
 
 
 def _cookie(conn: HTTPConnection, key: str) -> str:
-    return unquote(conn.cookies.get(key, "")).strip()[:MAX_NAME]
+    # Cleaned like messages.Name, so the cookie and a song's singer match.
+    return clean_text(unquote(conn.cookies.get(key, "")), MAX_NAME)
 
 
 @dataclass

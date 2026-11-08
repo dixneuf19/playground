@@ -209,6 +209,11 @@ async def ws(
             await svc.actions.handle(code, msg, from_screen=client.screen)
     except WebSocketDisconnect:
         pass
+    except Exception:
+        # 1011: the page reconnects (htmx only does for 1006/1011/1012/1013)
+        logger.exception("WebSocket of %s failed", code)
+        with contextlib.suppress(Exception):
+            await websocket.close(code=1011)
     finally:
         svc.hub.leave(code, client)
         with contextlib.suppress(Exception):

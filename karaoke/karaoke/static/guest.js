@@ -139,8 +139,7 @@ let missedPush = false;
 document.body.addEventListener("htmx:wsBeforeMessage", (e) => {
   if (dragging) { missedPush = true; e.preventDefault(); }
 });
-function catchUp() {
-  if (!missedPush) return;
+function refresh() {
   missedPush = false;
   htmx.ajax("GET", `/r/${CODE}/state`, { target: "body", swap: "none" });
 }
@@ -153,12 +152,13 @@ function sortable() {
     onStart: () => { dragging = true; },
     onEnd: (e) => {
       dragging = false;
-      if (e.oldIndex === e.newIndex) { catchUp(); return; }
-      missedPush = false; // the move brings a fresh push anyway
+      if (e.oldIndex === e.newIndex) { if (missedPush) refresh(); return; }
+      // Then reload the list: a move that changed nothing (the song was
+      // removed meanwhile) brings no push, and the dragged order would stay.
       htmx.ajax("POST", `/r/${CODE}/do`, {
         swap: "none",
         values: { type: "move", item_id: e.item.dataset.id, index: e.newIndex },
-      });
+      }).finally(refresh);
     },
   });
 }

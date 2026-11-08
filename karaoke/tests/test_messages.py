@@ -16,7 +16,7 @@ def test_add_trims_free_text_and_ignores_extra_fields() -> None:
         }
     )
     assert isinstance(msg, Add)
-    assert len(msg.title) == 200
+    assert len(msg.title) <= 200 and msg.title == msg.title.strip()
     assert msg.singer == ""
 
 
@@ -26,6 +26,12 @@ def test_add_trims_free_text_and_ignores_extra_fields() -> None:
 def test_add_rejects_anything_but_a_youtube_id(video_id: object) -> None:
     with pytest.raises(ValidationError):
         parse({"type": "add", "video_id": video_id})
+
+
+def test_names_never_end_with_a_space_after_cutting() -> None:
+    msg = parse({"type": "add", "video_id": "abcdefghijk", "singer": "x" * 39 + " y"})
+    assert isinstance(msg, Add)
+    assert msg.singer == "x" * 39
 
 
 def test_form_strings_are_coerced() -> None:

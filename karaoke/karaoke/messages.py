@@ -12,8 +12,13 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, TypeAdapter
 from karaoke.library import VIDEO_ID
 
 
+def clean_text(value: object, limit: int) -> str:
+    """Trimmed to `limit` characters, with no edge spaces left after cutting."""
+    return "" if value is None else str(value).strip()[:limit].strip()
+
+
 def _text(limit: int) -> BeforeValidator:
-    return BeforeValidator(lambda v: "" if v is None else str(v).strip()[:limit])
+    return BeforeValidator(lambda v: clean_text(v, limit))
 
 
 Text = Annotated[str, _text(200)]
