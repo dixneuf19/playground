@@ -26,8 +26,12 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
 - **Favourites are one ❤️ list for every room** (`favourites.py`, table
   `favourites`): anyone hearts a song from the search results, the queue or the
   player, and anyone may take a heart out (it asks first, since it's everyone's
-  list). The search tab lists the latest 50 before a search, above the popular songs. 500 stored at
-  most (a soft cap). Trust, then verify: a heart is saved at once with the
+  list). They have their own tab (❤️ Favoris, the 4th) showing all of them,
+  most played first, counted like the popular songs (rooms that sang them over
+  the last 30 days; ties: latest hearted), with the count on each card. No
+  display cap: a fresh heart (0 plays) must stay findable; the owner doesn't
+  guard against abuse here. The list is pushed on join and when it changes, so
+  counts catch up then, not at each play. 500 stored at most (a soft cap). Trust, then verify: a heart is saved at once with the
   phone's title and artist (no YouTube call while the phone waits), then the
   leader's `check_favourites` (every 5 s, 3 at a time) replaces them with
   YouTube's (`Searcher.describe`: a recent search, else a lookup of the id)

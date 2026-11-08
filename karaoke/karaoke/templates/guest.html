@@ -33,8 +33,6 @@
         <input class="field" id="q" name="q" type="search" placeholder="Titre, artiste ou lien YouTube…" autocomplete="off" enterkeyhint="search">
         <input type="hidden" id="everywhere" name="everywhere" value="0">
       </form>
-      {# Shown only before searching (see guest.css) #}
-      {{ state.favourites_panel() }}
       <div id="results">{% include "_results.html" %}</div>
     </section>
 
@@ -64,12 +62,17 @@
       <div class="sending hidden" id="sending"><span class="spinner"></span><span id="sending-text"></span></div>
       {{ state.my_photos_panel() }}
     </section>
+
+    <section class="view" id="view-favourites">
+      {{ state.favourites_panel() }}
+    </section>
   </main>
 
   <nav>
     <button data-view="search" class="active"><span class="ic">🔍</span>Chercher</button>
     <button data-view="queue"><span class="ic">🎶</span>File d'attente{{ state.queue_badge() }}</button>
     <button data-view="photos"><span class="ic">📸</span>Photos{{ state.photo_badge() }}</button>
+    <button data-view="favourites"><span class="ic">❤️</span>Favoris</button>
   </nav>
 
   <div class="sheet{{ ' hidden' if me }}" id="name-sheet">

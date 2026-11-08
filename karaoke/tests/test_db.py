@@ -101,11 +101,52 @@ def test_favourites_are_shared_and_capped(
             (VID, "A", True),  # first title kept; cached
         ]
         assert favs[1].thumbnail.endswith(f"/{VID}/mqdefault.jpg")
-        assert [f.video_id for f in await store.favourites(limit=1)] == ["kkkkkkkkkkk"]
         assert await store.hearted([VID, "zzzzzzzzzzz"]) == {VID}
         assert await store.set_favourite(VID, on=False)
         assert await store.set_favourite(VID, on=False)  # already gone: fine
         assert [f.video_id for f in await store.favourites()] == ["kkkkkkkkkkk"]
+
+    _run(make_settings, test)
+
+
+def test_favourites_most_played_first(make_settings: Callable[..., Settings]) -> None:
+    async def test(store: Store) -> None:
+        one, two, none = "ooooooooooo", "ttttttttttt", "nnnnnnnnnnn"
+        for vid in (two, one, none):  # hearted in this order: `none` latest
+            assert await store.set_favourite(vid, on=True, title=vid)
+        await store.pool.executemany(
+            """INSERT INTO plays (video_id, room_code, title, played_at)
+               VALUES ($1, $2, 't', now() - make_interval(days => $3))""",
+            [
+                (two, "AAAA", 0),
+                (two, "AAAA", 0),  # the same room again: counts once
+                (two, "BBBB", 1),
+                (one, "AAAA", 2),
+                (none, "CCCC", 40),  # older than the popular window
+            ],
+        )
+        favs = await store.favourites()
+        assert [(f.video_id, f.plays) for f in favs] == [(two, 2), (one, 1), (none, 0)]
+
+    _run(make_settings, test)
+
+
+def test_a_fresh_favourite_is_listed_after_50_played_ones(
+    make_settings: Callable[..., Settings],
+) -> None:
+    async def test(store: Store) -> None:
+        played = [f"p{n:010d}" for n in range(50)]
+        for vid in played:
+            assert await store.set_favourite(vid, on=True, title=vid)
+        await store.pool.executemany(
+            "INSERT INTO plays (video_id, room_code, title) VALUES ($1, 'AAAA', 't')",
+            [(vid,) for vid in played],
+        )
+        fresh = "fffffffffff"
+        assert await store.set_favourite(fresh, on=True, title="Just hearted")
+        favs = await store.favourites()
+        assert len(favs) == 51
+        assert (favs[-1].video_id, favs[-1].plays) == (fresh, 0)
 
     _run(make_settings, test)
 

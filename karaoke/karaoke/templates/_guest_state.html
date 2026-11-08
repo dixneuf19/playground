@@ -126,17 +126,25 @@ hx-post="{{ do }}" hx-vals='{{ vals|tojson }}' hx-swap="none"
 {% endmacro %}
 
 {% macro favourites_panel() %}
-<div id="favourites" class="favourites{{ ' hidden' if not favourites }}" {{ o }}>
-  <div class="section-title">
-    <span>❤️ Favoris</span>
-    <span class="muted small">{{ favourites|length|plural("chanson") if favourites }}</span>
+<div id="favourites" class="favourites" {{ o }}>
+  <div class="qhead">
+    <h2>❤️ Favoris</h2>
+    <span class="muted">{{ favourites|length|plural("chanson") if favourites }}</span>
   </div>
+  {% if favourites %}
   <div class="list">
     {% for f in favourites %}
     {{ song.card(room.code, f.video_id, f.title, f.artist, f.thumbnail, f.cancelled, f.ready,
-                 f.video_id in added, True, id="fav-" ~ f.video_id) }}
+                 f.video_id in added, True, plays=f.plays, id="fav-" ~ f.video_id) }}
     {% endfor %}
   </div>
+  <p class="muted hint">Les plus chantées d'abord, dans toutes les soirées.</p>
+  {% else %}
+  <div class="placeholder">
+    <div class="big">🤍</div>Aucun favori pour l'instant.<br>
+    Touche 🤍 sur une chanson pour la retrouver ici, dans toutes les soirées.
+  </div>
+  {% endif %}
 </div>
 {% endmacro %}
 
