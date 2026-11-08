@@ -104,7 +104,7 @@
     <form class="card" id="cancel-form" hx-post="/r/{{ room.code }}/do" hx-swap="none">
       <input type="hidden" name="type" value="cancel_artist">
       <h2>🚫 Cancel un artiste</h2>
-      <p class="muted">Ses chansons restent jouables, mais tout le monde sera prévenu. N'importe qui pourra le décancel.</p>
+      <p class="muted">Ses chansons restent jouables, mais tout le monde sera prévenu.</p>
       <input class="field" name="artist" id="cancel-artist" maxlength="80" placeholder="Artiste" required>
       <input class="field" name="reason" id="cancel-reason" maxlength="140" placeholder="Pourquoi ?" required>
       <div class="actions">
@@ -119,7 +119,7 @@
       <p class="muted" id="uncancel-text"></p>
       <div class="actions">
         <button class="btn btn-ghost" type="button" data-close>Fermer</button>
-        <button class="btn btn-primary" type="submit">Décancel</button>
+        <button class="btn btn-primary" type="submit">Dé-cancel</button>
       </div>
     </form>
   </div>
