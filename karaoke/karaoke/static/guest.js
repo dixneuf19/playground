@@ -104,7 +104,7 @@ document.addEventListener("htmx:confirm", (e) => {
 document.addEventListener("htmx:before:request", (e) => {
   // A search (the form, or the catalogue/YouTube buttons in the results)
   if (e.detail.ctx.sourceElement.matches("#search-form, #results [hx-get]") && $("q").value.trim()) {
-    $("results").innerHTML = '<div class="skeleton"></div>'.repeat(5);
+    $("results").innerHTML = `<div class="list">${'<div class="skeleton"></div>'.repeat(5)}</div>`;
   }
 });
 document.addEventListener("htmx:after:request", (e) => {
