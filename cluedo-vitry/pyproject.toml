@@ -6,7 +6,7 @@ authors = [
     { name = "Julen Dixneuf", email = "julen@loudnaround.org" }
 ]
 readme = "README.md"
-requires-python = "==3.14.*"
+requires-python = "==3.15.*"
 dependencies = []
 
 [dependency-groups]
