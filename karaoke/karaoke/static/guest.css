@@ -51,10 +51,6 @@ main { padding: 16px; max-width: 640px; margin: 0 auto; }
 .heart.on { opacity: 1; }
 .heart:active { transform: scale(0.85); }
 
-/* favourites: only on the search tab before searching */
-.favourites { margin-bottom: 8px; }
-#view-search:not(:has(.intro-search)) .favourites { display: none; }
-
 .placeholder { text-align: center; padding: 48px 16px; color: var(--muted); }
 .placeholder .big { font-size: 2.6rem; margin-bottom: 8px; }
 .intro-search { text-align: center; color: var(--muted); padding: 32px 8px 0; }

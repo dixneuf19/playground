@@ -701,13 +701,21 @@ class Store:
                 await self._notify(conn, {"favourites": True})
 
     async def favourites(self, limit: int = MAX_SHOWN) -> list[Favourite]:
-        """Latest hearted first."""
+        """Most played first, counted like `popular` (rooms that sang it over
+        the last weeks); ties go to the latest hearted."""
         rows = await self.pool.fetch(
             """SELECT f.video_id, f.title, f.artist, f.thumbnail,
-                      coalesce(v.status = 'ready', false) AS ready
-               FROM favourites f LEFT JOIN videos v USING (video_id)
-               ORDER BY f.created_at DESC, f.video_id LIMIT $1""",
+                      coalesce(v.status = 'ready', false) AS ready,
+                      coalesce(p.plays, 0)::int AS plays
+               FROM favourites f
+               LEFT JOIN videos v USING (video_id)
+               LEFT JOIN (SELECT video_id, count(DISTINCT room_code) AS plays
+                          FROM plays
+                          WHERE played_at > now() - make_interval(days => $2)
+                          GROUP BY video_id) p USING (video_id)
+               ORDER BY plays DESC, f.created_at DESC, f.video_id LIMIT $1""",
             limit,
+            POPULAR_DAYS,
         )
         return [Favourite(**dict(r)) for r in rows]
 

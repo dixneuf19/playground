@@ -209,7 +209,12 @@ def test_favourites_are_shared_by_every_room(client: TestClient) -> None:
     claim(client, second, "Tom")
     lea = claim(phone(client), first, "Léa")
     page = client.get(f"/r/{second}").text
-    assert 'class="favourites hidden"' in page  # nothing hearted yet
+    assert "Aucun favori" in page  # nothing hearted yet
+    # Their own tab, out of the search one
+    assert 'data-view="favourites"' in page
+    search = page[page.index('id="view-search"') : page.index('id="view-queue"')]
+    tab = page[page.index('id="view-favourites"') :]
+    assert 'id="favourites"' not in search and 'id="favourites"' in tab
     with client.websocket_connect(f"/ws/{second}?view=html") as tom:
         tom.receive_text()
         # Léa hearts a song in the first room: saved at once, phone's title
