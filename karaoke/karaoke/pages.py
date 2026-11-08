@@ -1,16 +1,29 @@
 """HTML pages, and the endpoints the htmx phone page talks to."""
 
 import json
+import time
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import ValidationError
 
 from karaoke.api import room_or_404
 from karaoke.cancelled import cancel_reason
-from karaoke.context import GuestName, LastName, Svc
-from karaoke.messages import Add, parse
+from karaoke.context import (
+    LAST_NAME_COOKIE,
+    TOKEN_AGE,
+    TOKEN_COOKIE,
+    GuestName,
+    LastName,
+    Svc,
+    cookie_text,
+    guest_token,
+    new_token,
+    room_cookie,
+)
+from karaoke.messages import MAX_NAME, Add, clean_text, parse
 from karaoke.rooms import Room
 from karaoke.search import SearchPage
 from karaoke.views import guest_state, render_guest_state, templates
@@ -52,6 +65,19 @@ async def display(code: str, request: Request, svc: Svc) -> HTMLResponse:
     return page(request, "display.html")
 
 
+def _set_cookies(
+    response: Response, code: str, token: str, name: str | None = None
+) -> None:
+    response.set_cookie(
+        TOKEN_COOKIE, token, max_age=TOKEN_AGE, httponly=True, samesite="lax"
+    )
+    if name is not None:
+        response.set_cookie(
+            LAST_NAME_COOKIE, quote(name), max_age=TOKEN_AGE, samesite="lax"
+        )
+    response.delete_cookie(room_cookie(code))
+
+
 @router.get("/r/{code}", response_class=HTMLResponse)
 async def guest(
     code: str, request: Request, svc: Svc, me: GuestName, last: LastName
@@ -59,15 +85,49 @@ async def guest(
     room = await svc.store.load_room(code)
     if room is None:
         raise HTTPException(404, "Salle introuvable")
-    return page(
+    token = guest_token(request) or new_token()
+    # A name confirmed before names were claimed: claim it once, if still free.
+    old = cookie_text(request, room_cookie(room.code))
+    if (
+        not me
+        and old
+        and await svc.store.claim_name(room.code, token, old, time.time())
+    ):
+        me = old
+    response = page(
         request,
         "guest.html",
         **guest_state(room, me),
         oob=False,
-        suggested=me or last,
+        suggested=me or old or last,
         **await results(svc, room, me, await svc.searcher.find("", everywhere=False)),
         initial=True,  # the search intro, inside the page
     )
+    _set_cookies(response, room.code, token)
+    return response
+
+
+@router.post("/r/{code}/name")
+async def claim_name(code: str, request: Request, svc: Svc) -> Response:
+    """The name sheet: one phone per name in a room. A name is free when
+    nobody holds it, or when its phone has been gone for a while."""
+    code = await room_or_404(svc, code)
+    name = clean_text((await request.form()).get("name"), MAX_NAME)
+    if not name:
+        raise HTTPException(422, "Choisis un prénom")
+    token = guest_token(request) or new_token()
+    if not await svc.store.claim_name(code, token, name, time.time()):
+        return JSONResponse(
+            {
+                "detail": f"« {name} » est déjà pris dans cette salle",
+                "suggestion": await svc.store.suggest_name(code, name),
+            },
+            status_code=409,
+        )
+    await svc.store.notify_room(code)  # the previous holder's phone loses it
+    response = Response(status_code=204)
+    _set_cookies(response, code, token, name)
+    return response
 
 
 @router.get("/r/{code}/state", response_class=HTMLResponse)

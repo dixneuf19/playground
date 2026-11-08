@@ -97,7 +97,8 @@ def make_settings(database_url: str, tmp_path: Path) -> Callable[..., Settings]:
         conn = await asyncpg.connect(database_url)
         try:
             await conn.execute(
-                "DROP TABLE IF EXISTS plays, photos, queue_items, videos, rooms, "
+                "DROP TABLE IF EXISTS guests, plays, photos, queue_items, videos, "
+                "rooms, "
                 "schema_migrations CASCADE"
             )
         finally:

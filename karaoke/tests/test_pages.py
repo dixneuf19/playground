@@ -5,8 +5,10 @@ import json
 import re
 from urllib.parse import quote
 
+import pytest
 from fastapi.testclient import TestClient
 
+from karaoke import db
 from karaoke.reactions import ROOM_EMOJI_BURST
 from karaoke.search import SearchResult
 from tests.conftest import freeze_reactions, services
@@ -20,8 +22,18 @@ def _room(client: TestClient) -> str:
 
 
 def _as(client: TestClient, code: str, name: str) -> TestClient:
-    client.cookies.set(f"karaoke_name_{code}", quote(name))  # as guest.js does
+    """Claim the name in the room, as the name sheet does (the client is one
+    phone: claiming another name releases the previous one)."""
+    res = client.post(f"/r/{code}/name", data={"name": name})
+    assert res.status_code == 204, res.text
     return client
+
+
+def _phone(client: TestClient) -> TestClient:
+    """Another phone in the same app: its own cookies, the same event loop."""
+    phone = TestClient(client.app)
+    phone.portal = client.portal
+    return phone
 
 
 def test_page_asks_for_a_name_until_it_has_one(client: TestClient) -> None:
@@ -134,9 +146,14 @@ def test_a_new_name_cookie_per_request_cannot_flood_the_room(
             )
         client.post(do, data={"type": "volume", "value": 0.5})  # NOTIFYs keep order
         fire = 0
-        while (cmd := screen.receive_json())["action"] == "react":
-            fire += cmd["count"]
-        assert cmd["action"] == "volume"
+        while True:
+            msg = screen.receive_json()
+            if msg["type"] != "command":
+                continue  # claiming a name pushes the state
+            if msg["action"] != "react":
+                break
+            fire += msg["count"]
+        assert msg["action"] == "volume"
     assert fire == ROOM_EMOJI_BURST
 
 
@@ -291,3 +308,96 @@ def test_search_intro_shows_popular_songs(client: TestClient) -> None:
     setattr(svc.searcher, "_search", nothing)  # noqa: B010
     html = client.get(f"/r/{code}/search", params={"q": "x"}).text
     assert "Les plus chantées" not in html  # a search replaces them
+
+
+def test_a_name_belongs_to_one_phone(client: TestClient) -> None:
+    code = _room(client)
+    _as(client, code, "Léa")
+    client.post(f"/api/rooms/{code}/photos", content=JPEG)  # goes on screen
+    waiting = client.post(f"/api/rooms/{code}/photos", content=JPEG).json()["id"]
+    other = _phone(client)
+    res = other.post(f"/r/{code}/name", data={"name": "Léa"})
+    assert res.status_code == 409
+    assert res.json() == {
+        "detail": "« Léa » est déjà pris dans cette salle",
+        "suggestion": "Léa 2",
+    }
+    # Not normalized: another spelling is another name
+    _as(other, code, "léa")
+    assert waiting not in other.get(f"/r/{code}/state").text
+    _as(other, code, "Léa 2")
+    res = other.post(f"/r/{code}/name", data={"name": "Léa"})
+    assert res.json()["suggestion"] == "Léa 3"
+    assert other.post(f"/r/{code}/name", data={"name": " "}).status_code == 422
+    assert other.post("/r/ZZZZ/name", data={"name": "x"}).status_code == 404
+
+
+def test_renaming_frees_the_previous_name(client: TestClient) -> None:
+    code = _room(client)
+    _as(client, code, "Léa")
+    _as(client, code, "Lou")
+    _as(_phone(client), code, "Léa")
+    assert "🎤 <span>Lou</span>" in client.get(f"/r/{code}").text
+
+
+def test_a_gone_phone_releases_its_name(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    code = _room(client)
+    _as(client, code, "Léa")
+    client.post(f"/api/rooms/{code}/photos", content=JPEG)  # goes on screen
+    waiting = client.post(f"/api/rooms/{code}/photos", content=JPEG).json()["id"]
+    monkeypatch.setattr(db, "NAME_RELEASE_SECONDS", -1)  # gone long enough
+    other = _phone(client)
+    with client.websocket_connect(f"/ws/{code}?view=html") as lea:
+        assert 'data-me="Léa"' in lea.receive_text()
+        _as(other, code, "Léa")  # a new phone simply takes it
+        pushed = lea.receive_text()
+    # The old phone lost the name on the next push; the new one has its photos
+    assert 'data-me=""' in pushed and "🎤 <span>?</span>" in pushed
+    assert f'id="ph-{waiting}"' in other.get(f"/r/{code}/state").text
+    assert waiting not in client.get(f"/r/{code}/state").text
+
+
+def test_an_open_socket_keeps_the_name(client: TestClient) -> None:
+    code = _room(client)
+    svc, portal = services(client), client.portal
+    assert portal is not None
+
+    def gone() -> None:
+        portal.call(
+            svc.store.pool.execute,
+            "UPDATE guests SET last_seen = now() - interval '1 hour'",
+        )
+
+    def claimable() -> bool:
+        res = _phone(client).post(f"/r/{code}/name", data={"name": "Léa"})
+        return res.status_code == 204
+
+    _as(client, code, "Léa")
+    assert not claimable()  # just claimed: still here
+    gone()
+    with client.websocket_connect(f"/ws/{code}?view=html") as lea:
+        lea.receive_text()  # sent once the socket counted as present
+        assert not claimable()  # connecting counts as being here
+        gone()
+        portal.call(svc.hub.heartbeat)  # every 30 s
+        assert not claimable()
+    gone()
+    assert claimable()
+
+
+def test_a_name_from_before_claims_is_kept_once(client: TestClient) -> None:
+    code = _room(client)
+    old = f"karaoke_name_{code}"
+    client.cookies.set(old, quote("Léa"))  # set by guest.js before
+    res = client.get(f"/r/{code}")
+    assert "🎤 <span>Léa</span>" in res.text
+    # Read once, then deleted
+    assert f'{old}=""; expires' in res.headers["set-cookie"]
+    # Someone else already holds it: the sheet opens, prefilled
+    other = _phone(client)
+    other.cookies.set(old, quote("Léa"))
+    page = other.get(f"/r/{code}").text
+    assert 'class="sheet" id="name-sheet"' in page
+    assert 'value="Léa"' in page

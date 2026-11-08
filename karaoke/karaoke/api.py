@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ValidationError
 
 from karaoke.cancelled import cancel_reason
-from karaoke.context import GuestName, Services, Svc, guest_name
+from karaoke.context import GuestName, Services, Svc, guest_token
 from karaoke.hub import Client
 from karaoke.messages import parse
 from karaoke.photo_files import MAX_PHOTO_BYTES, PhotoRejectedError, image_type
@@ -132,8 +132,8 @@ async def upload_photo(
     code: str, request: Request, svc: Svc, name: GuestName, uploader: str = ""
 ) -> dict[str, str]:
     code = await room_or_404(svc, code)
-    # The name confirmed for the room wins; `?uploader=` is for phone pages
-    # opened before the htmx one (no room cookie).
+    # The name this phone holds in the room wins; `?uploader=` is for phone
+    # pages opened before the htmx one.
     uploader = name or uploader.strip()[:40] or "Anonyme"
     if int(request.headers.get("content-length") or 0) > MAX_PHOTO_BYTES:
         raise HTTPException(413, "Photo trop lourde")
@@ -193,7 +193,7 @@ async def ws(
         websocket,
         screen=role == "display",
         html=view == "html",
-        name=guest_name(websocket),
+        token=guest_token(websocket),
     )
     await websocket.accept()
     try:

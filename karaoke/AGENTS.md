@@ -23,14 +23,20 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   flagged; the phone asks for a "J'assume" confirmation. The flag is computed
   server-side, never trusted from the phone. User-suggested cancellations: future.
 - **The screen doesn't show who sent a photo** (a product choice, not a security
-  property). A guest is known by the name confirmed for that room, in the
-  `karaoke_name_<CODE>` cookie: the phone page lists and cancels the pending
-  photos uploaded under that name, and tags their songs "moi". Same-name guests
-  share them (issue #55).
-- **A name is confirmed per room.** Entering a room opens the name sheet,
-  prefilled with the last name used anywhere (`karaoke_name` cookie, a
-  suggestion only); the guest confirms or changes it. Tapping the name in the
-  header changes it for this room.
+  property). A guest is known by the name their phone holds in the room: the
+  phone page lists and cancels the pending photos uploaded under that name, and
+  tags their songs "moi".
+- **One phone per name in a room** (table `guests`). Each phone gets a random
+  token (`karaoke_guest` cookie, HttpOnly, set by the server); the server finds
+  the phone's name from it, never from a name cookie. Entering a room opens the
+  name sheet, prefilled with the last name used anywhere (`karaoke_name`
+  cookie, a suggestion only); it posts to `/r/{code}/name`. A name held by
+  another phone is refused with a "Léa 2" suggestion, unless that phone has had
+  no socket open for 2 minutes (`db.NAME_RELEASE_SECONDS`): then the new phone
+  just takes it, with its photos and "moi" (a guest on a new phone, or with
+  cleared cookies). Names are compared exactly as typed, not normalized.
+  Changing name frees the old one; photos and songs stay under the old name.
+  Tapping the name in the header changes it for this room.
 - **Photo fairness, not FIFO** (`photos.PhotoQueue`): next photo comes from the
   uploader shown least recently; never-shown uploaders first; ties by upload order.
   One photo at a time, 10 s, tilted instant-photo print with washi tape; rotating
@@ -85,7 +91,7 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
 
 - **Phone page = htmx 4** (not 2: events are `htmx:phase:action`, no `hx-ext`,
   attributes don't inherit, morphing is built in; see the htmx upgrade guide).
-  The server renders it with Jinja (autoescaped) for the guest in the cookie.
+  The server renders it with Jinja (autoescaped) for the phone's guest.
   Each `_guest_state.html` macro renders one region with an id; after every
   change the hub renders them all (`_guest_push.html`, once per guest name)
   and pushes the HTML over the WebSocket (`hx-ws:connect`, `?view=html`); each
@@ -93,10 +99,10 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   survive. 4xx/5xx responses are not swapped (`noSwap` in the `htmx-config`
   meta tag): `guest.js` shows their JSON `detail` as a toast. Buttons
   `hx-post` to `/r/{code}/do` (form fields = a `messages` model; `singer` and
-  `uploader` always come from the cookie) and get the new state by push.
+  `uploader` always come from the name the phone holds) and get the new state by push.
   `hx-confirm` opens the app's own sheet; toasts come from `HX-Trigger`.
   Search is `GET /r/{code}/search` returning `_results.html`.
-- `guest.js` only does what needs the browser: tabs, the name cookie, the
+- `guest.js` only does what needs the browser: tabs, the name sheet, the
   confirm sheet, toasts, drag and drop (pushes are held during a drag), photo
   resizing before upload.
 - **Screen page = plain JS** (`display.js`): it is a video player state machine,
@@ -151,6 +157,12 @@ Prod runs 2 replicas. Everything a replica knows lives in Postgres or on the sha
    `rooms.current_item_id` is the reported song.
 6. The screen follows `state.state` for play/pause, not only the commands: a
    command lost during a reconnect is fixed by the next state push.
+7. Presence: every replica writes `guests.last_seen` (app clock) for its own
+   htmx phone sockets, on connect and every 30 s (`Hub.heartbeat`, not
+   leader-only: each replica only knows its own sockets). A dead pod stops
+   refreshing, so its phones' names free up after 2 minutes. Pushes read the
+   room's token → name map, so a rename or takeover reaches every phone on
+   the next push (the old phone's header goes back to "?").
 
 Invariants to keep:
 
@@ -195,7 +207,8 @@ Invariants to keep:
   (raw body, JPEG/PNG/WebP by magic bytes; uploader = `?uploader=` or the
   cookie), `/photos/{code}/{id}`, `/media/{video_id}.mp4`.
 - Pages: `/`, `/display/{code}`, `/r/{code}`. htmx: `GET /r/{code}/search`,
-  `GET /r/{code}/state` (the pushed fragments, on demand), `POST /r/{code}/do`
+  `GET /r/{code}/state` (the pushed fragments, on demand), `POST /r/{code}/name`
+  (claim a name: 204 + cookies, or 409 `{detail, suggestion}`), `POST /r/{code}/do`
   (any phone message as form fields; 204, maybe `HX-Trigger: {"toast": …}`).
 - WebSocket `/ws/{code}?role=display|guest&view=json|html`. Messages
   (`messages.py`) phone → server: `add`, `remove`, `move`, `skip`, `play`,
@@ -209,7 +222,7 @@ Invariants to keep:
 - Data on `/data` (owned by uid 1000, the container user): `songs/<video_id>.mp4`,
   `songs/.tmp/` (downloads in progress), `photos/<CODE>/<photo_id>`, `tmp/`
   (uploads in progress).
-- Tables: `rooms`, `queue_items`, `videos`, `photos`, `plays`, `schema_migrations`.
+- Tables: `rooms`, `queue_items`, `videos`, `photos`, `plays`, `guests`, `schema_migrations`.
 
 ## Commands (from `karaoke/`)
 
@@ -237,7 +250,7 @@ anyone can create a room), `PORT`, `LOG_LEVEL`.
   download instead). `test_one_leader_and_a_quick_takeover` covers the election.
 - Put logic in `rooms.py`/`photos.py`/`search.py` and test it there; messages in
   `test_messages.py`; wiring in `test_app.py` (JSON/WebSocket) and
-  `test_pages.py` (htmx page: set the `karaoke_name_<CODE>` cookie URL-encoded). `test_two_replicas_share_rooms`
+  `test_pages.py` (htmx page: claim a name with `_as`, a second phone with `_phone`). `test_two_replicas_share_rooms`
   runs two app instances on one database: extend it for cross-replica behaviour.
 - `-m integration` hits YouTube; run it after touching search or download code.
 

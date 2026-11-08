@@ -22,8 +22,10 @@ def _text(limit: int) -> BeforeValidator:
     return BeforeValidator(lambda v: clean_text(v, limit))
 
 
+MAX_NAME = 40
+
 Text = Annotated[str, _text(200)]
-Name = Annotated[str, _text(40)]
+Name = Annotated[str, _text(MAX_NAME)]
 VideoId = Annotated[str, Field(pattern=f"^{VIDEO_ID.pattern}$")]
 Finite = Annotated[float, Field(allow_inf_nan=False)]
 

@@ -1,9 +1,11 @@
 from collections.abc import Callable
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from starlette.testclient import WebSocketTestSession
 
+from karaoke import db
 from karaoke.app import create_app
 from karaoke.config import Settings
 from karaoke.reactions import BURST
@@ -179,6 +181,25 @@ def test_reactions_reach_screens_only_and_are_throttled_per_socket(
         assert fire == BURST
         # the guest socket gets the volume's state push, never the commands
         assert guest.receive_json()["type"] == "state"
+
+
+def test_names_are_shared_by_the_replicas(
+    make_settings: Callable[..., Settings], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = make_settings()
+    with TestClient(create_app(cfg)) as a, TestClient(create_app(cfg)) as b:
+        _no_downloads(a)
+        _no_downloads(b)
+        code = a.post("/api/rooms", json={}).json()["code"]
+        assert a.post(f"/r/{code}/name", data={"name": "Léa"}).status_code == 204
+        with a.websocket_connect(f"/ws/{code}?view=html") as lea_on_a:
+            assert 'data-me="Léa"' in lea_on_a.receive_text()
+            # Another phone, served by the other replica
+            assert b.post(f"/r/{code}/name", data={"name": "Léa"}).status_code == 409
+            monkeypatch.setattr(db, "NAME_RELEASE_SECONDS", -1)  # gone long enough
+            assert b.post(f"/r/{code}/name", data={"name": "Léa"}).status_code == 204
+            # Replica a pushes the change to the phone that lost the name
+            assert 'data-me=""' in lea_on_a.receive_text()
 
 
 def test_media_404_when_not_cached(client: TestClient) -> None:
