@@ -5,7 +5,7 @@ Guide for coding agents working in this monorepo. Project-specific guides live n
 ## Adding a project
 
 1. Put the project in its own top-level directory, as a uv project with `[tool.uv] exclude-newer = "3 days"` in its `pyproject.toml`. Lock with the oldest uv used in the Dockerfiles (`uvx uv@0.12 lock`).
-2. Copy an existing pair of workflows (`vitry-auberge-bot-docker.yml` and `vitry-auberge-bot-test.yml`) to `<project>-docker.yml` and `<project>-test.yml`, then rename the paths filters and the image name.
+2. Copy an existing pair of workflows (`vitry-auberge-bot-docker.yml` and `vitry-auberge-bot-test.yml`) to `<project>-docker.yml` and `<project>-test.yml`, then rename the paths filters, the image name and the GHA cache `scope`. A scope shared between projects makes their builds overwrite each other's cache, so every build starts cold.
 3. Name the image `ghcr.io/dixneuf19/playground/<project>`, which is `IMAGE_NAME: ${{ github.repository }}/<project>` in the docker workflow.
 4. Add `LABEL org.opencontainers.image.source=https://github.com/dixneuf19/playground` to the Dockerfile.
 5. List the project in `README.md` and `CLAUDE.md`. The root `renovate.json` already covers every directory, so do not add a per-project Renovate config.
