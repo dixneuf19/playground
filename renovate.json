@@ -10,6 +10,24 @@
         "https://cdn\\.jsdelivr\\.net/npm/(?<depName>[a-z0-9][a-z0-9._-]*)@(?<currentValue>\\d+\\.\\d+\\.\\d+)/"
       ],
       "datasourceTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "description": "npm packages run by deno to lint the karaoke JS (make check-format)",
+      "managerFilePatterns": ["/^karaoke/Makefile$/", "/^karaoke/eslint\\.config\\.js$/"],
+      "matchStrings": [
+        "npm:(?<depName>(@[a-z0-9-]+/)?[a-z0-9][a-z0-9._-]*)@(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "description": "deno in the karaoke CI, kept on the image's version",
+      "managerFilePatterns": ["/^\\.github/workflows/karaoke-test\\.yml$/"],
+      "matchStrings": ["deno-version: (?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "denoland/deno",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
     }
   ],
   "packageRules": [

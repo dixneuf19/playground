@@ -11,6 +11,7 @@ on:
       - "!karaoke/scripts/**"
       - "!karaoke/*.md"
       - "!karaoke/Makefile"
+      - "!karaoke/eslint.config.js"
       - ".github/workflows/karaoke-docker.yml"
   pull_request:
     paths: *paths

@@ -114,7 +114,7 @@ document.addEventListener("htmx:after:request", (e) => {
 // Errors are not swapped (noSwap in the htmx-config meta): show the message.
 document.addEventListener("htmx:response:error", (e) => {
   let detail = "";
-  try { detail = JSON.parse(e.detail.ctx.text).detail; } catch {}
+  try { detail = JSON.parse(e.detail.ctx.text).detail; } catch { /* not JSON */ }
   toast(typeof detail === "string" && detail ? detail : "Oups, ça n'a pas marché");
 });
 document.addEventListener("htmx:error", () => toast("Pas de réseau ?"));

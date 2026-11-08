@@ -2,9 +2,12 @@ format:
 	uv run ruff format
 	uv run ruff check --fix
 
+ESLINT = npm:eslint@10.14.0
+
 check-format:
 	uv run ruff format --check
 	uv run ruff check
+	deno run --quiet --allow-read --allow-env --allow-sys $(ESLINT) karaoke/static
 
 typecheck:
 	uv run ty check
