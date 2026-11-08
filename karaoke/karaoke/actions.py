@@ -52,8 +52,9 @@ class Actions:
         self.reactions = Reactions()
 
     async def handle(self, code: str, msg: Message, from_screen: bool) -> Room | None:
-        """Apply a message to the room. Returns the room as it is afterwards
-        (None if it doesn't exist, or for messages that don't touch it)."""
+        """Apply a message to the room. Returns the room as it is afterwards,
+        or None if it doesn't exist, the message changed nothing (a refused
+        add) or doesn't touch it."""
         if msg.screen_only and not from_screen:
             return None
         match msg:
@@ -83,7 +84,7 @@ class Actions:
                 return None
             tx.save = await self._apply(tx, msg)
         self.photos.cleanup(tx)
-        return tx.room if tx else None
+        return tx.room if tx and tx.save else None
 
     async def claim_name(self, code: str, token: str, name: str) -> bool | None:
         """The name sheet. False while another phone holds the name; None if
