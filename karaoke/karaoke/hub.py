@@ -158,7 +158,9 @@ class Hub:
         if msg.get("downloads"):
             self.on_downloads()
             return
-        if msg.get("favourites"):  # shared by every room
+        # Shared by every room. Cancellations change flags in the queue and
+        # in the favourites list too.
+        if msg.get("favourites") or msg.get("cancellations"):
             for room_code in list(self.clients):
                 self.push_state(room_code, favourites=True)
             return

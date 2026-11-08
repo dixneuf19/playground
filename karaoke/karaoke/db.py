@@ -15,6 +15,7 @@ from typing import Any
 
 import asyncpg
 
+from karaoke.cancelled import Cancellation, artist_key, find
 from karaoke.favourites import (
     MAX_FAILED_CHECKS,
     MAX_FAVOURITES,
@@ -36,6 +37,9 @@ logger = logging.getLogger(__name__)
 
 CHANNEL = "karaoke"
 SCHEMA_LOCK = 4242_0001  # pg_advisory_xact_lock keys
+# Queued songs of any room may change flag: each replica pushes all its rooms
+# (delivered on commit).
+CANCELLATIONS_CHANGED = {"cancellations": True}
 
 # Applied in order at startup, each once (recorded in schema_migrations), under
 # an advisory lock. A rolling update runs the previous code against the new
@@ -137,6 +141,20 @@ MIGRATIONS: list[str] = [
         ADD COLUMN IF NOT EXISTS verified boolean NOT NULL DEFAULT true,
         ADD COLUMN IF NOT EXISTS failed_checks int NOT NULL DEFAULT 0,
         ADD COLUMN IF NOT EXISTS checked_at timestamptz;
+    """,
+    # 7: cancelled artists, global to every room (they were hard-coded).
+    # queue_items.cancelled is still written for the previous release.
+    """
+    CREATE TABLE IF NOT EXISTS cancelled_artists (
+        key        text PRIMARY KEY,
+        artist     text NOT NULL,
+        reason     text NOT NULL,
+        by_name    text NOT NULL DEFAULT '',
+        created_at timestamptz NOT NULL
+    );
+    INSERT INTO cancelled_artists (key, artist, reason, created_at)
+    VALUES ('michel sardou', 'Michel Sardou', 'Cancel par la maison.', now())
+    ON CONFLICT DO NOTHING;
     """,
 ]
 
@@ -333,6 +351,7 @@ class Store:
                WHERE q.room_code = $1 ORDER BY q.is_current DESC, q.position""",
             code,
         )
+        cancellations = await self.cancellations(conn)
         queue, current = [], None
         for r in items:
             item = QueueItem(
@@ -344,7 +363,7 @@ class Store:
                 id=r["id"],
                 status=r["status"],
                 progress=r["progress"],
-                cancelled=r["cancelled"],
+                cancelled=find(cancellations, r["artist"], r["title"]),
             )
             if r["is_current"]:
                 current = item
@@ -417,7 +436,7 @@ class Store:
                     i.artist,
                     i.singer,
                     i.thumbnail,
-                    i.cancelled,
+                    i.cancelled.label() if i.cancelled else None,
                 )
                 for i, pos, cur in rows
             ],
@@ -459,6 +478,49 @@ class Store:
             )
         if tx._loaded_photo and tx._loaded_photo != (room.photo and room.photo.id):
             tx.hidden_photo = tx._loaded_photo
+
+    # --- cancelled artists --------------------------------------------------
+
+    async def cancellations(
+        self, conn: asyncpg.Connection | None = None
+    ) -> list[Cancellation]:
+        """Oldest first: the first match wins."""
+        rows = await (conn or self.pool).fetch(
+            """SELECT artist, reason, by_name,
+                      extract(epoch FROM created_at)::float8 AS at
+               FROM cancelled_artists ORDER BY created_at"""
+        )
+        return [
+            Cancellation(r["artist"], r["reason"], r["by_name"], r["at"]) for r in rows
+        ]
+
+    async def cancel_artist(self, c: Cancellation) -> None:
+        """Store (or reword) a cancellation and refresh every room."""
+        async with self.pool.acquire() as conn, conn.transaction():
+            await conn.execute(
+                """INSERT INTO cancelled_artists
+                       (key, artist, reason, by_name, created_at)
+                   VALUES ($1, $2, $3, $4, to_timestamp($5))
+                   ON CONFLICT (key) DO UPDATE SET artist = EXCLUDED.artist,
+                       reason = EXCLUDED.reason, by_name = EXCLUDED.by_name,
+                       created_at = EXCLUDED.created_at""",
+                c.key,
+                c.artist,
+                c.reason,
+                c.by,
+                c.at,
+            )
+            await self._notify(conn, CANCELLATIONS_CHANGED)
+
+    async def uncancel_artist(self, artist: str) -> bool:
+        async with self.pool.acquire() as conn, conn.transaction():
+            removed = await conn.fetchval(
+                "DELETE FROM cancelled_artists WHERE key = $1 RETURNING true",
+                artist_key(artist),
+            )
+            if removed:
+                await self._notify(conn, CANCELLATIONS_CHANGED)
+            return bool(removed)
 
     async def prune_rooms(self, ttl_seconds: int) -> list[str]:
         rows = await self.pool.fetch(
@@ -717,7 +779,11 @@ class Store:
                ORDER BY plays DESC, f.created_at DESC, f.video_id""",
             POPULAR_DAYS,
         )
-        return [Favourite(**dict(r)) for r in rows]
+        cancellations = await self.cancellations()
+        return [
+            Favourite(**dict(r), cancelled=find(cancellations, r["artist"], r["title"]))
+            for r in rows
+        ]
 
     async def hearted(self, video_ids: list[str]) -> set[str]:
         """Which of these videos are favourites."""

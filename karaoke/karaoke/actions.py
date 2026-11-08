@@ -4,13 +4,16 @@ Runs on any replica. Room changes go through `Store.room_tx` with the logic in
 karaoke.rooms; this module only routes each message to it.
 """
 
+import contextlib
 import logging
 import time
 
+from karaoke.cancelled import Cancellation, refusal
 from karaoke.db import RoomTx, Store
 from karaoke.library import Library
 from karaoke.messages import (
     Add,
+    CancelArtist,
     Ended,
     Heart,
     Message,
@@ -26,6 +29,7 @@ from karaoke.messages import (
     Restart,
     Retry,
     Skip,
+    UncancelArtist,
     Volume,
 )
 from karaoke.photo_files import PhotoFiles
@@ -33,6 +37,11 @@ from karaoke.reactions import Reactions
 from karaoke.rooms import QueueItem, Room
 
 logger = logging.getLogger(__name__)
+
+
+class RefusedError(Exception):
+    """A cancellation that can't be stored; the phone shows the message (in
+    French)."""
 
 
 class Actions:
@@ -64,6 +73,10 @@ class Actions:
                 )
                 if cmd is not None:
                     await self.store.notify_command(code, cmd)
+                return None
+            case CancelArtist() | UncancelArtist():  # global, not this room
+                with contextlib.suppress(RefusedError):
+                    await self.artist(msg)
                 return None
         async with self.store.room_tx(code) as tx:
             if tx is None:
@@ -141,6 +154,18 @@ class Actions:
         return await self.store.set_favourite(
             msg.video_id, msg.on, msg.title, msg.artist
         )
+
+    async def artist(self, msg: CancelArtist | UncancelArtist) -> bool:
+        """Cancel or uncancel an artist: not a room change, global, and every
+        room is refreshed. False when uncancelling an artist not cancelled."""
+        if isinstance(msg, UncancelArtist):
+            return await self.store.uncancel_artist(msg.artist)
+        if why := refusal(msg.artist, msg.reason):
+            raise RefusedError(why)
+        await self.store.cancel_artist(
+            Cancellation(msg.artist, msg.reason, msg.by, time.time())
+        )
+        return True
 
     async def _retry(self, code: str, item_id: str) -> None:
         room = await self.store.load_room(code)

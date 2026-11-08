@@ -1,7 +1,18 @@
 import pytest
 from pydantic import ValidationError
 
-from karaoke.messages import Add, Ended, Heart, Move, React, Volume, parse
+from karaoke.messages import (
+    Add,
+    CancelArtist,
+    Ended,
+    Heart,
+    Move,
+    React,
+    UncancelArtist,
+    Volume,
+    from_guest,
+    parse,
+)
 
 
 def test_add_trims_free_text_and_ignores_extra_fields() -> None:
@@ -82,6 +93,26 @@ def test_form_strings_are_coerced() -> None:
 def test_nonsense_is_rejected(data: dict) -> None:
     with pytest.raises(ValidationError):
         parse(data)
+
+
+def test_cancel_artist_trims_its_text() -> None:
+    msg = parse(
+        {"type": "cancel_artist", "artist": " Michel Sardou ", "reason": "x" * 500}
+    )
+    assert isinstance(msg, CancelArtist)
+    assert msg.artist == "Michel Sardou"
+    assert len(msg.reason) == 140
+    assert parse({"type": "uncancel_artist", "artist": "Sardou"}) == UncancelArtist(
+        type="uncancel_artist", artist="Sardou"
+    )
+
+
+def test_a_cancellation_is_signed_with_the_name_the_phone_holds() -> None:
+    forged = parse(
+        {"type": "cancel_artist", "artist": "Sardou", "reason": "x", "by": "Tom"}
+    )
+    signed = from_guest(forged, "Léa")
+    assert isinstance(signed, CancelArtist) and signed.by == "Léa"
 
 
 def test_screen_only_messages() -> None:

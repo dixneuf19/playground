@@ -14,10 +14,10 @@ from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisco
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ValidationError
 
-from karaoke.cancelled import cancel_reason
+from karaoke.cancelled import find
 from karaoke.context import GuestName, Services, Svc, guest_token
 from karaoke.hub import Client
-from karaoke.messages import Add, PhotoRemove, from_guest, parse
+from karaoke.messages import Add, CancelArtist, PhotoRemove, from_guest, parse
 from karaoke.photo_files import MAX_PHOTO_BYTES, PhotoRejectedError, image_type
 from karaoke.photos import MAX_PENDING_PER_ROOM, MAX_PENDING_PER_UPLOADER
 
@@ -114,12 +114,15 @@ async def search(
     await room_or_404(svc, room)  # only guests of a live room search
     page = await svc.searcher.find(q, everywhere)
     cached = await svc.store.cached([r.video_id for r in page.results])
+    cancellations = await svc.store.cancellations()
     return {
         "results": [
             {
                 **r.to_dict(),
                 "cached": r.video_id in cached,
-                "cancelled": cancel_reason(r.artist or r.channel, r.title),
+                "cancelled": (
+                    c.label() if (c := find(cancellations, r.artist, r.title)) else None
+                ),
             }
             for r in page.results
         ],
@@ -207,7 +210,7 @@ async def ws(
             except (ValueError, ValidationError) as e:
                 logger.warning("Bad message in %s: %s", code, e)
                 continue
-            if isinstance(msg, Add | PhotoRemove):
+            if isinstance(msg, Add | PhotoRemove | CancelArtist):
                 name = ""
                 if client.token and not client.screen:
                     name = await svc.store.guest_name(code, client.token)

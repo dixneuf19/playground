@@ -20,9 +20,6 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   resolves that one video; the search placeholder says so, and the intro has no
   paste button (owner's choice). `strong: false` (no result has every query word) makes
   the phone offer YouTube up front.
-- **Cancelled artists** (`cancelled.py`, `CANCELLED_ARTISTS`) stay playable but are
-  flagged; the phone asks for a "J'assume" confirmation. The flag is computed
-  server-side, never trusted from the phone. User-suggested cancellations: future.
 - **Favourites are one ❤️ list for every room** (`favourites.py`, table
   `favourites`): anyone hearts a song from the search results, the queue or the
   player, and anyone may take a heart out (it asks first, since it's everyone's
@@ -38,6 +35,23 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   and pushes the change. A video YouTube doesn't answer for is retried after
   10 min and dropped after 3 failures. Other videos are evicted from the cache past 80% of
   `KARAOKE_CACHE_MAX_GB`, favourites only past all of it.
+- **Cancelled artists** stay playable but are flagged; the phone asks for a
+  "J'assume" confirmation. Any guest cancels an artist (prefilled with the
+  song's first artist, editable, plus a reason) or uncancels one, from the
+  sheet that opens on tapping a song (results, popular songs, favourites,
+  queue). The cancel is signed with the name the phone holds. Global to
+  every room (`cancelled_artists` table, keyed by the normalized name, with
+  reason, guest name and date; Michel Sardou is the first row). The flag is
+  computed server-side on every load, never trusted from the phone, so
+  cancelling re-flags queued songs everywhere (one `{"cancellations": true}`
+  NOTIFY: each replica pushes all its rooms). Matching (`cancelled.find`):
+  a name matches an artist's whole name or one of its parts ("A & B", "A feat.
+  B"…), so "Michel" never flags Michel Polnareff; a name of 2+ words also
+  matches as whole words in artist + title, for mis-parsed or missing
+  artists (YouTube, the popular list), so "Love" never flags love songs.
+  A cancellation only needs a name and a reason. No rate limit, cap or
+  vague-name filter: it's a party among friends (owner's choice), and anyone
+  can uncancel.
 - **The screen doesn't show who sent a photo** (a product choice, not a security
   property). A guest is known by the name their phone holds in the room: the
   phone page lists and cancels the pending photos uploaded under that name, and
@@ -102,9 +116,9 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
 | `context.py` | `Services` (built once in `app.start`) and the `Svc`/`GuestName` dependencies. |
 | `search.py` | yt-dlp flat search (channels / all YouTube / single link), title parsing, ranking, `Searcher` (cache + concurrency). |
 | `library.py`, `photo_files.py` | Video files (yt-dlp download, ≤720p H.264 + AAC) and photo files on `/data`. |
-| `cancelled.py` | Cancelled artists, matched on whole normalized words. |
 | `reactions.py` | Reaction palette (`Kind`, `EMOJI`, `EFFECTS`), the per-sender `RateLimit` and the screen command for a reaction. |
 | `favourites.py` | The `Favourite` song shown in the shared ❤️ list, and its cap. |
+| `cancelled.py` | `Cancellation` (its key normalized once per row), `find` (whole names and duet parts, 2+-word names in titles), `split_artist`. Pure; the rows live in `db.py`. |
 | `config.py` | `Settings` from `KARAOKE_*` env vars. |
 | `app.py` | Wiring only: builds the services, includes the routers. |
 | `templates/` | `guest.html` (+ `_guest_state.html` fragments, `_guest_push.html`, `_results.html`, `_song.html`: the song card with its ❤️ and + buttons, shared by results, popular songs and favourites), `display.html`, `index.html`. |
@@ -213,7 +227,8 @@ Invariants to keep:
   `case` in `Actions._apply`. Don't parse raw dicts anywhere else.
 - Room times (`photo_until`, `position_at`) come from the app's clock
   (`time.time()`), never from Postgres `now()`.
-- Keep NOTIFY payloads tiny (room code + optional command; Postgres caps them at
+- Keep NOTIFY payloads tiny (room code + optional command, or a flag like
+  `{"cancellations": true}` for "push every room"; Postgres caps them at
   8000 bytes). Replicas re-read state from the DB, never from the payload.
 - Screen-only messages (`ended`, `player`, `position`) are gated by `is_display`;
   commands go only to screens.
@@ -248,7 +263,9 @@ Invariants to keep:
   (`messages.py`) phone → server: `add`, `remove`, `move`, `skip`, `play`,
   `pause`, `restart`, `volume`, `retry`, `heart`, `photo_skip`, `photo_remove`, `react`
   (`kind`, `count` 1-10; its `sender`, the throttle key, is set by the server:
-  the phone's token, or the socket when it has none). Screen
+  the phone's token, or the socket when it has none), `cancel_artist`,
+  `uncancel_artist` (global, not room changes: `Actions.artist`, before any
+  `room_tx`; a refused one raises `RefusedError`, a 409 toast). Screen
   only: `ended`, `player`, `position`. Server → JSON clients: `state` (full
   snapshot) and `command` (screens only; `react` carries `emoji` + `count` or
   `effect`); → `view=html`: HTML fragments. Close
@@ -256,7 +273,10 @@ Invariants to keep:
 - Data on `/data` (owned by uid 1000, the container user): `songs/<video_id>.mp4`,
   `songs/.tmp/` (downloads in progress), `photos/<CODE>/<photo_id>`, `tmp/`
   (uploads in progress).
-- Tables: `rooms`, `queue_items`, `videos`, `photos`, `plays`, `guests`, `favourites`, `schema_migrations`.
+- Tables: `rooms`, `queue_items`, `videos`, `photos`, `plays`, `guests`,
+  `favourites`, `cancelled_artists`, `schema_migrations`.
+  `queue_items.cancelled` is only written, for the release before cancelled
+  artists moved to a table.
 
 ## Commands (from `karaoke/`)
 

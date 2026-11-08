@@ -302,6 +302,95 @@ def test_only_the_uploader_sees_their_waiting_photos(client: TestClient) -> None
     assert waiting not in client.get(f"/r/{code}/state").text
 
 
+def test_anyone_cancels_and_uncancels_an_artist(client: TestClient) -> None:
+    async def fake(_q: str, _everywhere: bool, _link: str | None) -> list[SearchResult]:
+        return [
+            SearchResult(
+                video_id=VID,
+                title="L'aventurier",
+                artist="Indochine",
+                raw_title="",
+                channel="KaraFun",
+                duration=200,
+                thumbnail="t",
+                curated=True,
+            )
+        ]
+
+    setattr(services(client).searcher, "_search", fake)  # noqa: B010
+    code = _room(client)
+    claim(client, code, "Léa")
+
+    def search() -> str:
+        # Cached by the searcher, so only the flags change between calls
+        return client.get(f"/r/{code}/search", params={"q": "aventurier"}).text
+
+    html = search()
+    assert "J'assume" not in html
+    assert '"cancel": null' in html
+
+    refused = client.post(
+        f"/r/{code}/do", data={"type": "cancel_artist", "artist": "Indochine"}
+    )
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == "Donne une raison"
+
+    done = client.post(
+        f"/r/{code}/do",
+        # `by` is the cookie's name, not what the form says
+        data={
+            "type": "cancel_artist",
+            "artist": "Indochine",
+            "reason": "Trop triste",
+            "by": "Tom",
+        },
+    )
+    assert done.status_code == 204
+    assert json.loads(done.headers["HX-Trigger"]) == {
+        "toast": "🚫 Indochine est cancel",
+        "cancelled": True,
+    }
+    html = search()
+    assert 'data-confirm-yes="J\'assume"' in html
+    assert "Indochine : Trop triste (cancel par Léa)." in html
+    assert '"by": "L\\u00e9a"' in html  # for the artist sheet
+
+    done = client.post(
+        f"/r/{code}/do", data={"type": "uncancel_artist", "artist": "INDOCHINE"}
+    )
+    assert json.loads(done.headers["HX-Trigger"])["toast"] == (
+        "INDOCHINE n'est plus cancel"
+    )
+    assert "J'assume" not in search()
+    again = client.post(
+        f"/r/{code}/do", data={"type": "uncancel_artist", "artist": "Indochine"}
+    )
+    assert json.loads(again.headers["HX-Trigger"])["toast"] == (
+        "Indochine n'était pas cancel"
+    )
+
+
+def test_popular_songs_with_a_mis_parsed_title_are_flagged(
+    client: TestClient,
+) -> None:
+    svc = services(client)
+    path = svc.library.path_for(VID)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"fake mp4")
+    portal = client.portal
+    assert portal is not None
+    portal.call(svc.store.video_status, VID)
+    # split_title() reads this as song "Michel Sardou", artist "La maladie…"
+    title = "Michel Sardou - La maladie d'amour | Paroles"
+    portal.call(svc.store.finish_download, VID, True, title, 1)
+    code = _room(client)
+    claim(client, code, "Léa")
+    client.post(f"/r/{code}/do", data={"type": "add", "video_id": VID})
+    html = client.get(f"/r/{code}/search").text
+    assert "Les plus chantées" in html
+    assert 'data-confirm-yes="J\'assume"' in html
+
+
 def test_search_renders_results(client: TestClient) -> None:
     async def fake(_q: str, everywhere: bool, _link: str | None) -> list[SearchResult]:
         return [

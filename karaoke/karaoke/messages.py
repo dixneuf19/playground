@@ -26,6 +26,8 @@ MAX_NAME = 40
 
 Text = Annotated[str, _text(200)]
 Name = Annotated[str, _text(MAX_NAME)]
+Artist = Annotated[str, _text(80)]
+Reason = Annotated[str, _text(140)]
 VideoId = Annotated[str, Field(pattern=f"^{VIDEO_ID.pattern}$")]
 Finite = Annotated[float, Field(allow_inf_nan=False)]
 
@@ -114,6 +116,21 @@ class React(Message):
     sender: Name = ""
 
 
+class CancelArtist(Message):
+    """Global to every room. A missing name or reason is refused later, with
+    a message for the guest (karaoke.cancelled.refusal)."""
+
+    type: Literal["cancel_artist"]
+    artist: Artist
+    reason: Reason = ""
+    by: Name = ""
+
+
+class UncancelArtist(Message):
+    type: Literal["uncancel_artist"]
+    artist: Artist
+
+
 class Ended(Message):
     type: Literal["ended"]
     screen_only: ClassVar[bool] = True
@@ -148,6 +165,8 @@ AnyMessage = Annotated[
     | PhotoSkip
     | PhotoRemove
     | React
+    | CancelArtist
+    | UncancelArtist
     | Ended
     | Player
     | Position,
@@ -162,10 +181,12 @@ def parse(data: Any) -> Message:
 
 
 def from_guest(msg: Message, name: str) -> Message:
-    """Who sings or owns a photo is the name the phone holds in the room,
-    never what the message says."""
+    """Who sings, owns a photo or cancels an artist is the name the phone
+    holds in the room, never what the message says."""
     if isinstance(msg, Add):
         return msg.model_copy(update={"singer": name})
     if isinstance(msg, PhotoRemove):
         return msg.model_copy(update={"uploader": name})
+    if isinstance(msg, CancelArtist):
+        return msg.model_copy(update={"by": name})
     return msg

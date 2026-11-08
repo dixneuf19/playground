@@ -8,8 +8,9 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import ValidationError
 
+from karaoke.actions import RefusedError
 from karaoke.api import room_or_404
-from karaoke.cancelled import cancel_reason
+from karaoke.cancelled import find
 from karaoke.context import (
     LAST_NAME_COOKIE,
     TOKEN_AGE,
@@ -23,7 +24,16 @@ from karaoke.context import (
     new_token,
     room_cookie,
 )
-from karaoke.messages import MAX_NAME, Add, Heart, clean_text, from_guest, parse
+from karaoke.messages import (
+    MAX_NAME,
+    Add,
+    CancelArtist,
+    Heart,
+    UncancelArtist,
+    clean_text,
+    from_guest,
+    parse,
+)
 from karaoke.rooms import Room
 from karaoke.search import SearchPage
 from karaoke.views import (
@@ -48,15 +58,16 @@ async def results(svc: Svc, room: Room, me: str, found: SearchPage) -> dict[str,
     """What `_results.html` needs: the search results, or before any search
     the songs popular across rooms."""
     popular = [] if found.query else await svc.store.popular()
-    songs = [(r.video_id, r.artist or r.channel, r.title) for r in found.results]
+    songs = [(r.video_id, r.artist, r.title) for r in found.results]
     songs += [(p.video_id, p.artist, p.title) for p in popular]
     ids = [vid for vid, _, _ in songs]
+    cancellations = await svc.store.cancellations()
     return {
         "code": room.code,
         "page": found,
         "popular": popular,
         "cached": await svc.store.cached(ids),
-        "cancelled": {vid: cancel_reason(a, t) for vid, a, t in songs},
+        "cancelled": {vid: find(cancellations, a, t) for vid, a, t in songs},
         "added": queued_by(room, me),
         # the room's songs too: the phone page renders both from one context
         "hearted": await svc.store.hearted(ids + room_videos(room)),
@@ -209,8 +220,21 @@ async def act(code: str, request: Request, svc: Svc, me: GuestName) -> Response:
         msg = from_guest(parse(data), me)
     except ValidationError as e:
         raise HTTPException(422, "Requête invalide") from e
-    room = await svc.actions.handle(code, msg, from_screen=False)
     headers = {}
+    if isinstance(msg, CancelArtist | UncancelArtist):
+        try:
+            changed = await svc.actions.artist(msg)
+        except RefusedError as e:
+            raise HTTPException(409, str(e)) from e
+        if isinstance(msg, CancelArtist):
+            toast = f"🚫 {msg.artist} est cancel"
+        elif changed:
+            toast = f"{msg.artist} n'est plus cancel"
+        else:
+            toast = f"{msg.artist} n'était pas cancel"
+        headers["HX-Trigger"] = json.dumps({"toast": toast, "cancelled": True})
+        return Response(status_code=204, headers=headers)
+    room = await svc.actions.handle(code, msg, from_screen=False)
     if isinstance(msg, Add) and room is not None:
         place = room.position_of(msg.video_id, msg.singer or "Anonyme")
         if place is None:

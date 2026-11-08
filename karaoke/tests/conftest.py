@@ -113,7 +113,7 @@ def make_settings(database_url: str, tmp_path: Path) -> Callable[..., Settings]:
         try:
             await conn.execute(
                 "DROP TABLE IF EXISTS guests, plays, photos, queue_items, videos, "
-                "rooms, favourites, "
+                "rooms, favourites, cancelled_artists, "
                 "schema_migrations CASCADE"
             )
         finally:
