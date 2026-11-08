@@ -1,0 +1,18 @@
+[project]
+name = "cluedo-vitry"
+version = "1.0.0"
+description = "Sam Marsalis's music blog, a prop website for the Vitry murder party"
+authors = [
+    { name = "Julen Dixneuf", email = "julen@loudnaround.org" }
+]
+readme = "README.md"
+requires-python = "==3.14.*"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]
+
+[tool.uv]
+exclude-newer = "3 days"

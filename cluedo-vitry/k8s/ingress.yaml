@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cluedo-vitry
+  namespace: cluedo-vitry
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - sam-marsalis.dixneuf19.fr
+      secretName: sam-marsalis-dixneuf19-fr-tls
+  rules:
+    - host: sam-marsalis.dixneuf19.fr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: cluedo-vitry
+                port:
+                  number: 80

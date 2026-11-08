@@ -55,3 +55,15 @@ make check-format   # Check formatting + linting
 make typecheck      # Type check with ty
 make test           # Unit tests
 ```
+
+### cluedo-vitry
+
+Static prop website (Sam Marsalis's music blog) for the Vitry murder party, served by a standard library `server.py` with a fake admin login (`ADMIN_PASSWORD`). Deployed by hand with `kubectl apply` from `cluedo-vitry/k8s/` on the homelab cluster, not through brassberry-gitops.
+
+**Common commands (run from `cluedo-vitry/`):**
+
+```bash
+uv sync             # Install dependencies
+make dev            # Serve the site on :8000
+make test           # Smoke test: start server.py and fetch pages
+```
