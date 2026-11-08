@@ -235,10 +235,10 @@ async def act(code: str, request: Request, svc: Svc, me: GuestName) -> Response:
         headers["HX-Trigger"] = json.dumps({"toast": toast, "cancelled": True})
         return Response(status_code=204, headers=headers)
     room = await svc.actions.handle(code, msg, from_screen=False)
-    if isinstance(msg, Add) and room is not None:
-        place = room.position_of(msg.video_id, msg.singer or "Anonyme")
-        if place is None:
+    if isinstance(msg, Add):
+        if room is None:  # the only add that changes nothing: a full queue
             raise HTTPException(409, "La file est pleine")
+        place = room.position_of(msg.video_id, msg.singer or "Anonyme") or 1
         text = (
             "Ajouté, c'est bientôt à toi 🎤"
             if place <= 1

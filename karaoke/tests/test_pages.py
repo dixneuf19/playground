@@ -8,8 +8,9 @@ from urllib.parse import quote
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx2 import Response
 
-from karaoke import db
+from karaoke import db, rooms
 from karaoke.app import create_app
 from karaoke.config import Settings
 from karaoke.reactions import BURST, ROOM_EMOJI_BURST
@@ -92,6 +93,30 @@ def test_add_takes_the_singer_from_the_cookie(client: TestClient) -> None:
 
     assert client.post(f"/r/{code}/do", data={"type": "add"}).status_code == 422
     assert client.post("/r/ZZZZ/do", data={"type": "skip"}).status_code == 404
+
+
+def test_a_full_queue_refuses_a_song_already_queued(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(rooms, "MAX_QUEUE", 2)
+    code = _room(client)
+    lea = claim(client, code, "Léa")
+
+    def add(video_id: str) -> Response:
+        return lea.post(
+            f"/r/{code}/do", data={"type": "add", "video_id": video_id, "title": "S"}
+        )
+
+    assert add(VID).status_code == 204
+    res = add("bcdefghijkl")
+    assert res.status_code == 204
+    assert json.loads(res.headers["HX-Trigger"])["toast"] == "Ajouté, position 2"
+
+    # Léa already has VID queued: the refused add must not claim it was added.
+    res = add(VID)
+    assert res.status_code == 409
+    assert res.json()["detail"] == "La file est pleine"
+    assert len(client.get(f"/api/rooms/{code}").json()["queue"]) == 2
 
 
 def test_reactions_from_the_phone_page(client: TestClient) -> None:
