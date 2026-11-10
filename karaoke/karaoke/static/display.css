@@ -13,15 +13,16 @@ body.playing { cursor: none; }
 .join { display: flex; gap: 2em; align-items: center; }
 .qr-big {
   width: 15em; height: 15em; background: white; border-radius: 1.2em; padding: 0.6em;
-  box-shadow: 0 0 0 0.35em rgba(255, 61, 139, 0.4), var(--shadow);
+  box-shadow: 0 0 0 0.2em var(--cyan), 0 0 2.2em rgba(62, 224, 255, 0.5), var(--shadow);
 }
 .qr-big img { width: 100%; height: 100%; }
-.join .code { font-size: 3.4em; display: block; color: var(--text); }
+.join .code { font-size: 3.4em; display: block; color: var(--cyan); text-shadow: 0 0 0.3em rgba(62, 224, 255, 0.6); }
 .join .url { font-size: 1em; margin-top: 0.4em; word-break: break-all; }
 .side { align-self: stretch; display: flex; flex-direction: column; min-height: 0; }
 .side h2 { font-size: 1.1em; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin: 0 0 1em; }
 .qlist { display: flex; flex-direction: column; gap: 0.7em; overflow: hidden; }
 .qitem { display: flex; gap: 1em; align-items: center; padding: 0.7em; }
+.qitem:first-child { border-color: rgba(255, 61, 139, 0.6); box-shadow: 0 0 1.4em rgba(255, 61, 139, 0.25), 0 6px 20px rgba(0, 0, 0, 0.45); }
 .qitem img { width: 6.5em; aspect-ratio: 16/9; object-fit: cover; border-radius: 0.6em; flex: none; }
 .qitem .t { font-weight: 700; font-size: 1.15em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .qitem .a { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -49,7 +50,8 @@ body.playing { cursor: none; }
 #upnext {
   left: 50%; bottom: 3vh; transform: translate(-50%, 0);
   padding: 0.8em 1.6em; border-radius: 999px; font-size: 1.15em;
-  background: var(--grad); font-weight: 600; box-shadow: var(--shadow); white-space: nowrap;
+  background: rgba(11, 6, 26, 0.85); backdrop-filter: blur(10px); border: 2px solid var(--pink);
+  font-weight: 600; box-shadow: 0 0 1.2em rgba(255, 61, 139, 0.55), var(--shadow); white-space: nowrap;
 }
 #upnext.off { opacity: 0; transform: translate(-50%, 150%); }
 #pausebadge {
@@ -60,11 +62,11 @@ body.playing { cursor: none; }
 /* --- interstitial "your turn" --------------------------------------- */
 #turn {
   position: fixed; inset: 0; display: grid; place-items: center; text-align: center;
-  background: radial-gradient(circle at 50% 40%, rgba(123, 92, 255, 0.35), transparent 60%), var(--bg);
+  background: radial-gradient(circle at 50% 40%, rgba(255, 61, 139, 0.2), transparent 60%), var(--bg);
   z-index: 10;
 }
 #turn .who { font-size: 1.6em; color: var(--muted); margin-bottom: 0.3em; }
-#turn .name { font-size: 6em; font-weight: 800; line-height: 1; margin-bottom: 0.3em; }
+#turn .name { font-size: 6em; line-height: 1.1; margin-bottom: 0.3em; }
 #turn .song { font-size: 2.2em; font-weight: 700; }
 #turn .artist { font-size: 1.4em; color: var(--muted); margin-top: 0.2em; }
 #turn .count { margin-top: 1.4em; font-size: 1.2em; color: var(--muted); }

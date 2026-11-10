@@ -161,6 +161,8 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
 - `guest.js` only does what needs the browser: tabs, the name sheet, the
   confirm sheet, toasts, drag and drop (pushes are held during a drag), photo
   resizing before upload.
+- **Look: "violet néon"** (`app.css` tokens): dark purple, rounded cards, Outfit text.
+  Light comes from glows (Tilt Neon logo, `--glow-pink`/`--glow-cyan`), not gradient fills: pink leads, cyan seconds.
 - **Screen page = plain JS** (`display.js`): it is a video player state machine,
   fed with JSON states and commands. Keep it that way.
 - `make check-format` also runs ESLint on `static/*.js` (`eslint.config.js`),
