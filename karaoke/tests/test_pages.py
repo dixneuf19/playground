@@ -520,7 +520,7 @@ def test_search_renders_results(client: TestClient) -> None:
     )
     assert "Catalogue karaoké" in html
     assert "4:05" in html
-    assert '<span class="src">·&nbsp;KaraFun FR</span>' in html
+    assert '<span class="tag tag-src">KaraFun FR</span>' in html
     assert 'data-confirm-yes="J\'assume"' in html  # cancelled: asks first
     assert 'name="everywhere" value="0"' in html
 

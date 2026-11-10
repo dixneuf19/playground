@@ -23,8 +23,9 @@ TODO and ideas: GitHub issues labelled `karaoke` in dixneuf19/playground
   way, so a `Channel` carries its title formats (`search.parse_title`): a new
   channel needs its formats, a short `label` and a test. A result card says
   where its video comes from, so guests can judge it: the curated channel's
-  `label` after the artist ("Renaud · KaraFun FR"), or YouTube's channel name in
-  place of the artist on other results. Popular songs, favourites and the
+  `label` as a tag under the title ("KaraFun FR"; not after the artist, which
+  phones cropped), or YouTube's channel name in place of the artist on other
+  results. Popular songs, favourites and the
   queue don't store the channel, so they don't show it. Searching all of YouTube
   needs an explicit tap and appends " karaoke" to the query. A pasted YouTube link
   resolves that one video; the search placeholder says so, and the intro has no
