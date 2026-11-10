@@ -1,18 +1,19 @@
 :root {
-  --bg: #0c0718;
+  --bg: #0b061a;
   --bg-2: #150d29;
-  --surface: #1c1336;
-  --surface-2: #261a47;
-  --line: rgba(255, 255, 255, 0.08);
+  --surface: #231849;
+  --surface-2: #31245c;
+  --line: rgba(255, 255, 255, 0.13);
   --text: #f6f1ff;
   --muted: #a99fc9;
   --pink: #ff3d8b;
-  --violet: #7b5cff;
   --cyan: #3ee0ff;
   --green: #3ddc97;
   --red: #ff5a6a;
-  --grad: linear-gradient(135deg, var(--pink), var(--violet));
   --radius: 18px;
+  --glow-pink: 0 0 0 3px rgba(255, 61, 139, 0.18), 0 0 18px rgba(255, 61, 139, 0.6);
+  --glow-cyan: 0 0 0 3px rgba(62, 224, 255, 0.2), 0 0 26px rgba(62, 224, 255, 0.5);
+  --neon-pink: 0 0 3px #fff, 0 0 9px var(--pink), 0 0 20px var(--pink), 0 0 38px #b03cff;
   --shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
   color-scheme: dark;
 }
@@ -30,10 +31,7 @@ html, body {
 }
 
 body {
-  background:
-    radial-gradient(1200px 600px at 10% -10%, rgba(255, 61, 139, 0.18), transparent 60%),
-    radial-gradient(900px 600px at 110% 10%, rgba(123, 92, 255, 0.22), transparent 60%),
-    var(--bg);
+  background: radial-gradient(700px 360px at 50% -80px, rgba(255, 61, 139, 0.16), transparent 70%), var(--bg);
   background-attachment: fixed;
 }
 
@@ -42,13 +40,12 @@ button { cursor: pointer; border: 0; background: none; }
 img { display: block; }
 .hidden { display: none !important; }
 
+/* Tilt Neon has a single weight: a neon tube, not a bold logo */
 .brand {
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  background: var(--grad);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  font-family: "Tilt Neon", "Outfit", sans-serif;
+  font-weight: 400;
+  color: #ffe1ee;
+  text-shadow: var(--neon-pink);
 }
 
 .btn {
@@ -60,7 +57,7 @@ img { display: block; }
 }
 .btn:active { transform: scale(0.96); }
 .btn:disabled { opacity: 0.5; cursor: default; }
-.btn-primary { background: var(--grad); color: white; box-shadow: 0 6px 24px rgba(255, 61, 139, 0.35); }
+.btn-primary { background: var(--pink); color: white; box-shadow: var(--glow-pink); }
 .btn-ghost { background: var(--surface-2); }
 .btn-danger { background: rgba(255, 90, 106, 0.15); color: var(--red); }
 
@@ -73,13 +70,14 @@ img { display: block; }
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
-.field:focus { border-color: var(--violet); box-shadow: 0 0 0 4px rgba(123, 92, 255, 0.2); }
+.field:focus { border-color: rgba(62, 224, 255, 0.6); box-shadow: 0 0 0 4px rgba(62, 224, 255, 0.15); }
 .field::placeholder { color: var(--muted); }
 
 .card {
-  background: var(--surface);
+  background: linear-gradient(180deg, #281c52, #20163f);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.45);
 }
 
 .muted { color: var(--muted); }
@@ -119,7 +117,7 @@ img { display: block; }
 
 .eq { display: inline-flex; gap: 3px; align-items: flex-end; height: 1em; }
 .eq i { width: 4px; background: var(--pink); border-radius: 2px; animation: eq 0.9s ease-in-out infinite; }
-.eq i:nth-child(2) { animation-delay: -0.3s; background: var(--violet); }
+.eq i:nth-child(2) { animation-delay: -0.3s; background: var(--cyan); }
 .eq i:nth-child(3) { animation-delay: -0.6s; background: var(--cyan); }
 .paused .eq i { animation-play-state: paused; }
 @keyframes eq { 0%, 100% { height: 25%; } 50% { height: 100%; } }
