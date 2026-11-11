@@ -6,6 +6,7 @@ authors = [
     { name = "Julen Dixneuf", email = "julen@loudnaround.org" }
 ]
 dependencies = [
+    "asyncpg>=0.32.0",
     "python-dotenv>=1.0.0",
     "python-telegram-bot[job-queue]>=22.0",
 ]

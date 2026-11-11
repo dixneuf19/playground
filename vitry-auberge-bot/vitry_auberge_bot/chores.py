@@ -112,7 +112,16 @@ def in_progress(now: datetime) -> list[tuple[date, Chore]]:
     return result
 
 
+def format_hour(when: datetime) -> str:
+    """French hour, e.g. "20h" or "18h30"."""
+    return f"{when.hour}h{when.minute:02d}" if when.minute else f"{when.hour}h"
+
+
+def format_day(day: date) -> str:
+    """French short date, e.g. "lun. 05/10"."""
+    return f"{DAY_NAMES[day.weekday()]} {day:%d/%m}"
+
+
 def format_when(when: datetime) -> str:
-    """French short date, e.g. "lun. 05/10 20h" or "dim. 11/10 18h30"."""
-    hour = f"{when.hour}h{when.minute:02d}" if when.minute else f"{when.hour}h"
-    return f"{DAY_NAMES[when.weekday()]} {when:%d/%m} {hour}"
+    """French short date and hour, e.g. "lun. 05/10 20h" or "dim. 11/10 18h30"."""
+    return f"{format_day(when.date())} {format_hour(when)}"

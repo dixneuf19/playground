@@ -45,7 +45,7 @@ uv run pytest -m integration     # Real YouTube search + download (slow)
 
 ### vitry-auberge-bot
 
-Telegram bot reminding the Vitry flatmates of their chores. The schedule lives in `vitry_auberge_bot/chores.py`.
+Telegram bot reminding the Vitry flatmates of their chores. The schedule lives in `vitry_auberge_bot/chores.py`. La Fourche deliveries (optional, Postgres state) live in `vitry_auberge_bot/lafourche.py`.
 
 **Common commands (run from `vitry-auberge-bot/`):**
 
