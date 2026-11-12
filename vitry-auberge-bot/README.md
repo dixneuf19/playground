@@ -31,6 +31,22 @@ There is no public API: the bot signs in to the Firebase project behind lafourch
 
 Announced orders and sent reminders are kept in Postgres (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`), so a restart does not announce them twice. The table is created on startup.
 
+## La Fourche order history
+
+`python -m vitry_auberge_bot.lafourche_history` (`make sync-lafourche`) copies every order of the account, with its items, to the same Postgres database, for price and spending stats. It is a one-shot command, run weekly by a CronJob. Each run rewrites all orders, so it is safe to run again.
+
+- `lafourche_purchases`: one row per order (date, delivery day, totals, shipping, cancellation) and the raw API answer in `payload`.
+- `lafourche_purchase_lines`: one row per item, with quantity, unit price, discount, weight in `grams` and the derived `price_per_kg`.
+
+For example, the price history of a product:
+
+```sql
+SELECT p.ordered_at::date, l.title, l.variant_title, l.unit_price, l.price_per_kg
+FROM lafourche_purchase_lines l JOIN lafourche_purchases p ON p.id = l.purchase_id
+WHERE p.cancelled_at IS NULL AND l.title ILIKE '%penne%'
+ORDER BY p.ordered_at;
+```
+
 ## Setup
 
 1. Create the bot with [@BotFather](https://t.me/BotFather) and get its token.
