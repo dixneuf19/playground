@@ -1,7 +1,7 @@
 import html
 import logging
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import cast
 
 from dotenv import load_dotenv
@@ -19,6 +19,7 @@ from telegram.ext import (
     filters,
 )
 
+from vitry_auberge_bot import lafourche
 from vitry_auberge_bot.chores import CHORES, CHORES_BY_ID, TZ, Chore, format_when, in_progress, upcoming
 from vitry_auberge_bot.tracker import Occurrence, Tracker
 
@@ -29,6 +30,8 @@ logger = logging.getLogger(__name__)
 
 BOT_TELEGRAM_TOKEN = os.getenv("BOT_TELEGRAM_TOKEN")
 CHAT_ID = int(os.getenv("CHAT_ID") or 0)
+LAFOURCHE_EMAIL = os.getenv("LAFOURCHE_EMAIL")
+LAFOURCHE_PASSWORD = os.getenv("LAFOURCHE_PASSWORD", "")
 
 REMINDER_PREFIXES = (
     "⏰ Rappel !",
@@ -37,6 +40,8 @@ REMINDER_PREFIXES = (
 )
 
 tracker = Tracker()
+orders: lafourche.OrderSource | None = None
+store: lafourche.Store | None = None
 
 
 def done_keyboard(occurrence: Occurrence) -> InlineKeyboardMarkup:
@@ -183,13 +188,78 @@ async def resume_in_progress(application: Application) -> None:
         schedule_reminders(job_queue, chore, day, now)
 
 
+async def poll_orders(context: ContextTypes.DEFAULT_TYPE) -> None:
+    assert orders is not None and store is not None
+    now = datetime.now(TZ)
+    try:
+        fetched = await orders.fetch_orders()
+    except Exception:
+        logger.exception("Could not fetch La Fourche orders")
+        return
+    changes = lafourche.compare(await store.known(now), fetched, now)
+    # Sent before being recorded: a failed send is retried at the next poll
+    for order in changes.new:
+        logger.info("New La Fourche order %s", order.id)
+        await context.bot.send_message(CHAT_ID, lafourche.new_order_message(order), parse_mode=ParseMode.HTML)
+        await store.add(order)
+    for previous, order in changes.rescheduled:
+        logger.info("La Fourche order %s rescheduled", order.id)
+        await context.bot.send_message(
+            CHAT_ID, lafourche.rescheduled_message(previous, order), parse_mode=ParseMode.HTML
+        )
+        await store.reschedule(order)
+    for order in changes.cancelled:
+        logger.info("La Fourche order %s cancelled", order.id)
+        await context.bot.send_message(CHAT_ID, lafourche.cancelled_message(order), parse_mode=ParseMode.HTML)
+        await store.cancel(order)
+
+
+async def remind_orders(context: ContextTypes.DEFAULT_TYPE) -> None:
+    assert store is not None
+    tomorrow = datetime.now(TZ).date() + timedelta(days=1)
+    for order in await store.due_reminders(tomorrow):
+        logger.info("Reminder for La Fourche order %s", order.id)
+        await context.bot.send_message(CHAT_ID, lafourche.reminder_message(order), parse_mode=ParseMode.HTML)
+        await store.mark_reminded(order)
+
+
+async def post_init(application: Application) -> None:
+    global orders, store
+    await resume_in_progress(application)
+    if not LAFOURCHE_EMAIL:
+        logger.info("LAFOURCHE_EMAIL is not set: La Fourche deliveries are not followed")
+        return
+    orders = lafourche.LaFourcheClient(LAFOURCHE_EMAIL, LAFOURCHE_PASSWORD)
+    store = await lafourche.Store.connect(
+        host=os.getenv("DB_HOST", "localhost"),
+        port=int(os.getenv("DB_PORT") or 5432),
+        database=os.getenv("DB_NAME", "vitry_auberge_bot"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+    )
+    job_queue = application.job_queue
+    assert job_queue is not None
+    for index, when in enumerate(lafourche.POLL_TIMES):
+        job_queue.run_daily(poll_orders, time=when, name=f"lafourche-poll-{index}")
+    job_queue.run_daily(remind_orders, time=lafourche.REMINDER_TIME, name="lafourche-reminder")
+    # Catch up on what was missed while the bot was down
+    job_queue.run_once(poll_orders, when=0, name="lafourche-poll-startup")
+
+
+async def post_shutdown(application: Application) -> None:
+    if store is not None:
+        await store.close()
+
+
 def main() -> None:
     if not BOT_TELEGRAM_TOKEN:
         raise RuntimeError("BOT_TELEGRAM_TOKEN environment variable is required")
     if not CHAT_ID:
         logger.warning("CHAT_ID is not set: only /chatid and /help will be useful")
 
-    application = Application.builder().token(BOT_TELEGRAM_TOKEN).post_init(resume_in_progress).build()
+    application = (
+        Application.builder().token(BOT_TELEGRAM_TOKEN).post_init(post_init).post_shutdown(post_shutdown).build()
+    )
     job_queue = application.job_queue
     assert job_queue is not None
 
