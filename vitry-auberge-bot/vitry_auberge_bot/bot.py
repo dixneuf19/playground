@@ -26,6 +26,7 @@ from vitry_auberge_bot.tracker import Occurrence, Tracker
 load_dotenv()
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpx2").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 BOT_TELEGRAM_TOKEN = os.getenv("BOT_TELEGRAM_TOKEN")
