@@ -32,6 +32,44 @@ query GetCustomerOrder($pageSize: Int) {
   }
 }
 """
+HISTORY_QUERY = """
+query GetCustomerOrderHistory($pageSize: Int, $cursor: String) {
+  getCustomerOrder(pageSize: $pageSize, cursor: $cursor) {
+    cursor
+    items {
+      id
+      name
+      createdAt
+      processedAt
+      cancelledAt
+      currency
+      totalPrice
+      subtotalPrice
+      totalLineItemsPrice
+      totalDiscounts
+      totalTax
+      totalShippingPriceSet { shopMoney { amount currencyCode } }
+      discountCodes
+      noteAttributes { name value }
+      updatedTimeSlot { deliveryDate startTime endTime }
+      lineItems {
+        id
+        productId
+        variantId
+        sku
+        title
+        variantTitle
+        name
+        vendor
+        quantity
+        price
+        grams
+        totalDiscount
+      }
+    }
+  }
+}
+"""
 
 
 @dataclass(frozen=True)
@@ -59,28 +97,52 @@ class LaFourcheClient:
         self.password = password
         self.page_size = page_size
 
-    async def fetch_orders(self) -> list[Order]:
-        async with httpx2.AsyncClient(timeout=30) as http:
-            sign_in = await http.post(
-                SIGN_IN_URL,
-                params={"key": FIREBASE_API_KEY},
-                json={"email": self.email, "password": self.password, "returnSecureToken": True},
-            )
-            sign_in.raise_for_status()
-            response = await http.post(
-                GRAPHQL_URL,
-                headers={"authorization": f"Bearer {sign_in.json()['idToken']}", "lf-channel": "default:fr_FR"},
-                json={
-                    "operationName": "GetCustomerOrder",
-                    "query": ORDERS_QUERY,
-                    "variables": {"pageSize": self.page_size},
-                },
-            )
-            response.raise_for_status()
+    async def _sign_in(self, http: httpx2.AsyncClient) -> str:
+        response = await http.post(
+            SIGN_IN_URL,
+            params={"key": FIREBASE_API_KEY},
+            json={"email": self.email, "password": self.password, "returnSecureToken": True},
+        )
+        response.raise_for_status()
+        return response.json()["idToken"]
+
+    async def _query(
+        self, http: httpx2.AsyncClient, token: str, operation: str, query: str, variables: dict[str, Any]
+    ) -> dict[str, Any]:
+        response = await http.post(
+            GRAPHQL_URL,
+            headers={"authorization": f"Bearer {token}", "lf-channel": "default:fr_FR"},
+            json={"operationName": operation, "query": query, "variables": variables},
+        )
+        response.raise_for_status()
         payload = response.json()
         if payload.get("errors"):
             raise RuntimeError(f"La Fourche API errors: {payload['errors']}")
-        return parse_orders(payload["data"]["getCustomerOrder"]["items"])
+        return payload["data"]
+
+    async def fetch_orders(self) -> list[Order]:
+        async with httpx2.AsyncClient(timeout=30) as http:
+            token = await self._sign_in(http)
+            data = await self._query(http, token, "GetCustomerOrder", ORDERS_QUERY, {"pageSize": self.page_size})
+        return parse_orders(data["getCustomerOrder"]["items"])
+
+    async def fetch_order_history(self, page_size: int = 50, max_pages: int = 100) -> list[dict[str, Any]]:
+        """Every order of the account with its line items, as returned by the API, newest first."""
+        items: list[dict[str, Any]] = []
+        cursor: str | None = None
+        async with httpx2.AsyncClient(timeout=60) as http:
+            token = await self._sign_in(http)
+            for _ in range(max_pages):
+                variables: dict[str, Any] = {"pageSize": page_size}
+                if cursor:
+                    variables["cursor"] = cursor
+                data = await self._query(http, token, "GetCustomerOrderHistory", HISTORY_QUERY, variables)
+                page = data["getCustomerOrder"]
+                items.extend(page["items"] or [])
+                if not page["items"] or not page.get("cursor") or page["cursor"] == cursor:
+                    return items
+                cursor = page["cursor"]
+        raise RuntimeError(f"La Fourche order history has more than {max_pages} pages of {page_size}")
 
 
 def _parse_time(day: date, value: str) -> datetime:
