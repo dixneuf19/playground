@@ -6,6 +6,7 @@ from datetime import date, datetime, time
 from typing import Any, Protocol
 
 import asyncpg
+import httpx2
 
 from vitry_auberge_bot.chores import TZ, format_day, format_hour
 
@@ -14,12 +15,30 @@ logger = logging.getLogger(__name__)
 POLL_TIMES = (time(9, 0, tzinfo=TZ), time(18, 30, tzinfo=TZ))
 REMINDER_TIME = time(19, 0, tzinfo=TZ)
 
+# Public web config of lafourche.fr (Firebase project production-la-fourche)
+FIREBASE_API_KEY = "AIzaSyDt_BPgkSXBnG_4VBmSXL04jMW03kj7whg"
+SIGN_IN_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
+GRAPHQL_URL = "https://api.lafourche.fr/graphql"
+ORDERS_QUERY = """
+query GetCustomerOrder($pageSize: Int) {
+  getCustomerOrder(pageSize: $pageSize) {
+    items {
+      id
+      name
+      cancelledAt
+      updatedTimeSlot { deliveryDate startTime endTime }
+    }
+  }
+}
+"""
+
 
 @dataclass(frozen=True)
 class Order:
     id: str
     delivery_start: datetime
     delivery_end: datetime
+    cancelled: bool = False
 
     def same_slot(self, other: Order) -> bool:
         return (self.delivery_start, self.delivery_end) == (other.delivery_start, other.delivery_end)
@@ -32,14 +51,59 @@ class OrderSource(Protocol):
 
 
 class LaFourcheClient:
-    """La Fourche account API. Endpoints and authentication still to be filled in."""
+    """The GraphQL API behind lafourche.fr, authenticated with the account's Firebase email and password."""
 
-    def __init__(self, email: str, password: str) -> None:
+    def __init__(self, email: str, password: str, page_size: int = 10) -> None:
         self.email = email
         self.password = password
+        self.page_size = page_size
 
     async def fetch_orders(self) -> list[Order]:
-        raise NotImplementedError("La Fourche API client is not implemented yet")
+        async with httpx2.AsyncClient(timeout=30) as http:
+            sign_in = await http.post(
+                SIGN_IN_URL,
+                params={"key": FIREBASE_API_KEY},
+                json={"email": self.email, "password": self.password, "returnSecureToken": True},
+            )
+            sign_in.raise_for_status()
+            response = await http.post(
+                GRAPHQL_URL,
+                headers={"authorization": f"Bearer {sign_in.json()['idToken']}", "lf-channel": "default:fr_FR"},
+                json={
+                    "operationName": "GetCustomerOrder",
+                    "query": ORDERS_QUERY,
+                    "variables": {"pageSize": self.page_size},
+                },
+            )
+            response.raise_for_status()
+        payload = response.json()
+        if payload.get("errors"):
+            raise RuntimeError(f"La Fourche API errors: {payload['errors']}")
+        return parse_orders(payload["data"]["getCustomerOrder"]["items"])
+
+
+def _parse_time(day: date, value: str) -> datetime:
+    """ "18:00", "18:00:00" or a full ISO datetime."""
+    if "T" in value:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(TZ)
+    return datetime.combine(day, time.fromisoformat(value), tzinfo=TZ)
+
+
+def parse_orders(items: list[dict[str, Any]]) -> list[Order]:
+    orders = []
+    for item in items:
+        slot = item.get("updatedTimeSlot")
+        if not slot or not slot.get("deliveryDate"):
+            logger.info("Order %s has no delivery slot", item.get("name"))
+            continue
+        try:
+            day = date.fromisoformat(slot["deliveryDate"][:10])
+            start, end = _parse_time(day, slot["startTime"]), _parse_time(day, slot["endTime"])
+        except KeyError, TypeError, ValueError:
+            logger.warning("Unreadable delivery slot for order %s: %s", item.get("name"), slot)
+            continue
+        orders.append(Order(str(item["id"]), start, end, cancelled=item.get("cancelledAt") is not None))
+    return orders
 
 
 @dataclass(frozen=True)
@@ -47,21 +111,29 @@ class Changes:
     new: list[Order]
     # (previously known, now fetched)
     rescheduled: list[tuple[Order, Order]]
+    cancelled: list[Order]
 
 
 def compare(known: dict[str, Order], fetched: list[Order], now: datetime) -> Changes:
-    """New orders and changed delivery slots, ignoring deliveries already over."""
+    """New, rescheduled and cancelled orders, ignoring deliveries already over.
+
+    `known` holds the announced orders not cancelled yet.
+    """
     new: list[Order] = []
     rescheduled: list[tuple[Order, Order]] = []
+    cancelled: list[Order] = []
     for order in sorted(fetched, key=lambda o: o.delivery_start):
         if order.delivery_end <= now:
             continue
         previous = known.get(order.id)
-        if previous is None:
+        if order.cancelled:
+            if previous is not None:
+                cancelled.append(previous)
+        elif previous is None:
             new.append(order)
         elif not previous.same_slot(order):
             rescheduled.append((previous, order))
-    return Changes(new, rescheduled)
+    return Changes(new, rescheduled, cancelled)
 
 
 def format_slot(order: Order) -> str:
@@ -79,6 +151,10 @@ def rescheduled_message(previous: Order, order: Order) -> str:
     return f"🔄 La livraison <b>La Fourche</b> a changé : le {format_slot(order)} (au lieu du {format_slot(previous)})."
 
 
+def cancelled_message(order: Order) -> str:
+    return f"❌ La commande <b>La Fourche</b> du {format_slot(order)} est annulée."
+
+
 def reminder_message(order: Order) -> str:
     start = order.delivery_start.astimezone(TZ)
     end = order.delivery_end.astimezone(TZ)
@@ -94,7 +170,8 @@ CREATE TABLE IF NOT EXISTS lafourche_orders (
     delivery_start timestamptz NOT NULL,
     delivery_end   timestamptz NOT NULL,
     announced_at   timestamptz NOT NULL DEFAULT now(),
-    reminded_at    timestamptz
+    reminded_at    timestamptz,
+    cancelled_at   timestamptz
 )
 """
 
@@ -120,7 +197,9 @@ class Store:
 
     async def known(self, now: datetime) -> dict[str, Order]:
         rows = await self.pool.fetch(
-            "SELECT id, delivery_start, delivery_end FROM lafourche_orders WHERE delivery_end > $1", now
+            "SELECT id, delivery_start, delivery_end FROM lafourche_orders"
+            " WHERE delivery_end > $1 AND cancelled_at IS NULL",
+            now,
         )
         return {row["id"]: _order(row) for row in rows}
 
@@ -142,11 +221,14 @@ class Store:
             order.delivery_end,
         )
 
+    async def cancel(self, order: Order) -> None:
+        await self.pool.execute("UPDATE lafourche_orders SET cancelled_at = now() WHERE id = $1", order.id)
+
     async def due_reminders(self, day: date) -> list[Order]:
         """Orders delivered on `day` (Paris time) whose reminder has not been sent."""
         rows = await self.pool.fetch(
             "SELECT id, delivery_start, delivery_end FROM lafourche_orders"
-            " WHERE (delivery_start AT TIME ZONE 'Europe/Paris')::date = $1 AND reminded_at IS NULL"
+            " WHERE (delivery_start AT TIME ZONE 'Europe/Paris')::date = $1 AND reminded_at IS NULL AND cancelled_at IS NULL"
             " ORDER BY delivery_start",
             day,
         )

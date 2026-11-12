@@ -20,15 +20,16 @@ All chores live in [`vitry_auberge_bot/chores.py`](vitry_auberge_bot/chores.py).
 
 ## La Fourche deliveries
 
-Optional, enabled by `LAFOURCHE_EMAIL`. The bot reads the La Fourche orders of the flat's account at 9:00, 18:30 and on startup, and posts in the group:
+Optional, enabled by `LAFOURCHE_EMAIL` and `LAFOURCHE_PASSWORD` (the flat's La Fourche account). The bot reads the latest orders at 9:00, 18:30 and on startup, and posts in the group:
 
 - when a new order shows up, with its delivery slot,
 - when the slot of a known order changes,
+- when a known order is cancelled,
 - at 19:00 the evening before the delivery, as a reminder.
 
-Announced orders and sent reminders are kept in Postgres (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`), so a restart does not announce them twice. The table is created on startup.
+There is no public API: the bot signs in to the Firebase project behind lafourche.fr with the account's email and password, then calls the `getCustomerOrder` query of `api.lafourche.fr/graphql`, as the website does. It may break whenever La Fourche changes their site.
 
-The API client in [`vitry_auberge_bot/lafourche.py`](vitry_auberge_bot/lafourche.py) is still a stub: `LaFourcheClient.fetch_orders` raises until the API details are known.
+Announced orders and sent reminders are kept in Postgres (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`), so a restart does not announce them twice. The table is created on startup.
 
 ## Setup
 

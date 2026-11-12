@@ -208,6 +208,10 @@ async def poll_orders(context: ContextTypes.DEFAULT_TYPE) -> None:
             CHAT_ID, lafourche.rescheduled_message(previous, order), parse_mode=ParseMode.HTML
         )
         await store.reschedule(order)
+    for order in changes.cancelled:
+        logger.info("La Fourche order %s cancelled", order.id)
+        await context.bot.send_message(CHAT_ID, lafourche.cancelled_message(order), parse_mode=ParseMode.HTML)
+        await store.cancel(order)
 
 
 async def remind_orders(context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -9,9 +9,11 @@ from vitry_auberge_bot.chores import TZ
 from vitry_auberge_bot.lafourche import (
     Order,
     Store,
+    cancelled_message,
     compare,
     format_slot,
     new_order_message,
+    parse_orders,
     reminder_message,
     rescheduled_message,
 )
@@ -52,6 +54,46 @@ def test_only_deliveries_not_over_are_announced():
     assert compare({}, fetched, NOW).new == [ongoing]
 
 
+def test_cancelled_known_order_is_reported_once():
+    known = order("a", 13, 18, 20)
+    cancelled = Order("a", known.delivery_start, known.delivery_end, cancelled=True)
+    assert compare({"a": known}, [cancelled], NOW).cancelled == [known]
+    # Once recorded as cancelled the store no longer lists it as known
+    assert compare({}, [cancelled], NOW) == compare({}, [], NOW)
+
+
+def test_parse_orders_with_hours_or_datetimes():
+    items = [
+        {
+            "id": 1,
+            "name": "#1",
+            "cancelledAt": None,
+            "updatedTimeSlot": {"deliveryDate": "2026-11-13", "startTime": "18:00", "endTime": "20:30:00"},
+        },
+        {
+            "id": "2",
+            "name": "#2",
+            "cancelledAt": "2026-11-11T10:00:00Z",
+            "updatedTimeSlot": {
+                "deliveryDate": "2026-11-14T00:00:00.000Z",
+                "startTime": "2026-11-14T07:00:00Z",
+                "endTime": "2026-11-14T09:00:00Z",
+            },
+        },
+        {"id": "3", "name": "#3", "cancelledAt": None, "updatedTimeSlot": None},
+        {
+            "id": "4",
+            "name": "#4",
+            "cancelledAt": None,
+            "updatedTimeSlot": {"deliveryDate": "demain", "startTime": "x", "endTime": "y"},
+        },
+    ]
+    assert parse_orders(items) == [
+        Order("1", at(13, 18), at(13, 20, 30)),
+        Order("2", at(14, 8), at(14, 10), cancelled=True),
+    ]
+
+
 def test_messages_in_french():
     o = Order("a", at(13, 18), at(13, 20, 30))
     assert format_slot(o) == "ven. 13/11 entre 18h et 20h30"
@@ -59,6 +101,7 @@ def test_messages_in_french():
     assert rescheduled_message(order("a", 12, 8, 10), o).endswith(
         "le ven. 13/11 entre 18h et 20h30 (au lieu du jeu. 12/11 entre 8h et 10h)."
     )
+    assert cancelled_message(o) == "❌ La commande <b>La Fourche</b> du ven. 13/11 entre 18h et 20h30 est annulée."
     assert reminder_message(o) == (
         "⚠️ Rappel : une commande <b>La Fourche</b> arrive demain (ven. 13/11) entre 18h et 20h30 !"
     )
@@ -90,6 +133,10 @@ def test_store_round_trip():
             await store.reschedule(moved)
             assert (await store.known(NOW))["a"] == moved
             assert [o.id for o in await store.due_reminders(date(2026, 11, 14))] == ["a"]
+
+            await store.cancel(moved)
+            assert "a" not in await store.known(NOW)
+            assert await store.due_reminders(date(2026, 11, 14)) == []
         finally:
             await store.close()
 
