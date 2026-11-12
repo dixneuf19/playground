@@ -62,36 +62,55 @@ def test_cancelled_known_order_is_reported_once():
     assert compare({}, [cancelled], NOW) == compare({}, [], NOW)
 
 
-def test_parse_orders_with_hours_or_datetimes():
+def notes(day: str, slot: str) -> list[dict[str, str]]:
+    return [
+        {"name": "userId", "value": "x"},
+        {"name": "delivery_date", "value": day},
+        {"name": "delivery_time_slot", "value": slot},
+    ]
+
+
+def test_parse_orders_reads_the_checkout_slot_from_note_attributes():
+    # As returned by api.lafourche.fr on 2026-11-12
     items = [
         {
-            "id": 1,
-            "name": "#1",
+            "id": "1",
+            "name": "003741041",
             "cancelledAt": None,
-            "updatedTimeSlot": {"deliveryDate": "2026-11-13", "startTime": "18:00", "endTime": "20:30:00"},
+            "updatedTimeSlot": None,
+            "noteAttributes": notes("2026/11/16", "09:00 - 11:00"),
         },
         {
             "id": "2",
             "name": "#2",
             "cancelledAt": "2026-11-11T10:00:00Z",
-            "updatedTimeSlot": {
-                "deliveryDate": "2026-11-14T00:00:00.000Z",
-                "startTime": "2026-11-14T07:00:00Z",
-                "endTime": "2026-11-14T09:00:00Z",
-            },
+            "updatedTimeSlot": None,
+            "noteAttributes": notes("2026/11/14", "18:00 - 20:30"),
         },
-        {"id": "3", "name": "#3", "cancelledAt": None, "updatedTimeSlot": None},
+        {"id": "3", "name": "#3", "cancelledAt": None, "updatedTimeSlot": None, "noteAttributes": []},
         {
             "id": "4",
             "name": "#4",
             "cancelledAt": None,
-            "updatedTimeSlot": {"deliveryDate": "demain", "startTime": "x", "endTime": "y"},
+            "updatedTimeSlot": None,
+            "noteAttributes": notes("demain", "matin"),
         },
     ]
     assert parse_orders(items) == [
-        Order("1", at(13, 18), at(13, 20, 30)),
-        Order("2", at(14, 8), at(14, 10), cancelled=True),
+        Order("1", at(16, 9), at(16, 11)),
+        Order("2", at(14, 18), at(14, 20, 30), cancelled=True),
     ]
+
+
+def test_updated_time_slot_wins_over_the_checkout_slot():
+    item = {
+        "id": "1",
+        "name": "#1",
+        "cancelledAt": None,
+        "noteAttributes": notes("2026/11/16", "09:00 - 11:00"),
+        "updatedTimeSlot": {"deliveryDate": "2026-11-17T00:00:00.000Z", "startTime": "18:00", "endTime": "20:00:00"},
+    }
+    assert parse_orders([item]) == [Order("1", at(17, 18), at(17, 20))]
 
 
 def test_messages_in_french():

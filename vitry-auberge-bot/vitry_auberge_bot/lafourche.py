@@ -26,6 +26,7 @@ query GetCustomerOrder($pageSize: Int) {
       id
       name
       cancelledAt
+      noteAttributes { name value }
       updatedTimeSlot { deliveryDate startTime endTime }
     }
   }
@@ -86,23 +87,36 @@ def _parse_time(day: date, value: str) -> datetime:
     """ "18:00", "18:00:00" or a full ISO datetime."""
     if "T" in value:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(TZ)
-    return datetime.combine(day, time.fromisoformat(value), tzinfo=TZ)
+    return datetime.combine(day, time.fromisoformat(value.strip()), tzinfo=TZ)
+
+
+def _slot(item: dict[str, Any]) -> tuple[datetime, datetime] | None:
+    """`updatedTimeSlot` when the slot was changed after ordering, else the note attributes set at checkout
+    (delivery_date "2026/11/16", delivery_time_slot "09:00 - 11:00")."""
+    updated = item.get("updatedTimeSlot")
+    if updated and updated.get("deliveryDate"):
+        day = date.fromisoformat(updated["deliveryDate"][:10])
+        return _parse_time(day, updated["startTime"]), _parse_time(day, updated["endTime"])
+    notes = {note["name"]: note["value"] for note in item.get("noteAttributes") or []}
+    if not notes.get("delivery_date") or not notes.get("delivery_time_slot"):
+        return None
+    day = date.fromisoformat(notes["delivery_date"].replace("/", "-"))
+    start, end = notes["delivery_time_slot"].split("-")
+    return _parse_time(day, start), _parse_time(day, end)
 
 
 def parse_orders(items: list[dict[str, Any]]) -> list[Order]:
     orders = []
     for item in items:
-        slot = item.get("updatedTimeSlot")
-        if not slot or not slot.get("deliveryDate"):
+        try:
+            slot = _slot(item)
+        except KeyError, TypeError, ValueError:
+            logger.warning("Unreadable delivery slot for order %s", item.get("name"))
+            continue
+        if slot is None:
             logger.info("Order %s has no delivery slot", item.get("name"))
             continue
-        try:
-            day = date.fromisoformat(slot["deliveryDate"][:10])
-            start, end = _parse_time(day, slot["startTime"]), _parse_time(day, slot["endTime"])
-        except KeyError, TypeError, ValueError:
-            logger.warning("Unreadable delivery slot for order %s: %s", item.get("name"), slot)
-            continue
-        orders.append(Order(str(item["id"]), start, end, cancelled=item.get("cancelledAt") is not None))
+        orders.append(Order(str(item["id"]), *slot, cancelled=item.get("cancelledAt") is not None))
     return orders
 
 
