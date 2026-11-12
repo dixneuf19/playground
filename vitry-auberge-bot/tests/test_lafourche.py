@@ -116,7 +116,10 @@ def test_updated_time_slot_wins_over_the_checkout_slot():
 def test_messages_in_french():
     o = Order("a", at(13, 18), at(13, 20, 30))
     assert format_slot(o) == "ven. 13/11 entre 18h et 20h30"
-    assert "Nouvelle commande" in new_order_message(o)
+    assert new_order_message(o) == (
+        "🧺 Nouvelle commande <b>La Fourche</b> ! Livraison le ven. 13/11 entre 18h et 20h30.\n"
+        "Vous pouvez encore y ajouter des produits tant qu'elle n'est pas en préparation."
+    )
     assert rescheduled_message(order("a", 12, 8, 10), o).endswith(
         "le ven. 13/11 entre 18h et 20h30 (au lieu du jeu. 12/11 entre 8h et 10h)."
     )

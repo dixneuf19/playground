@@ -158,7 +158,10 @@ def format_slot(order: Order) -> str:
 
 
 def new_order_message(order: Order) -> str:
-    return f"🧺 Nouvelle commande <b>La Fourche</b> ! Livraison le {format_slot(order)}."
+    return (
+        f"🧺 Nouvelle commande <b>La Fourche</b> ! Livraison le {format_slot(order)}.\n"
+        "Vous pouvez encore y ajouter des produits tant qu'elle n'est pas en préparation."
+    )
 
 
 def rescheduled_message(previous: Order, order: Order) -> str:
