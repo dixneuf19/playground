@@ -58,6 +58,21 @@ make typecheck      # Type check with ty
 make test           # Unit tests
 ```
 
+### sfr-mms-bot
+
+Telegram bot: forward it the SFR SMS announcing an undelivered MMS, it logs in on vosmms.com and sends the MMS parts back. SMS parsing lives in `sfr_mms_bot/parser.py`, the vosmms.com client in `sfr_mms_bot/vosmms.py`. The user allowlist fails closed. Never commit a real SMS, phone number or password, not even in tests.
+
+**Common commands (run from `sfr-mms-bot/`):**
+
+```bash
+uv sync             # Install dependencies
+make dev            # Run the bot locally (needs TELEGRAM_BOT_TOKEN and TELEGRAM_ALLOWED_USERS in .env)
+make format         # Format + lint fix
+make check-format   # Check formatting + linting
+make typecheck      # Type check with ty
+make test           # Unit tests (no network)
+```
+
 ### cluedo-vitry
 
 Static prop website (Sam Marsalis's music blog) for the Vitry murder party, served by a standard library `server.py` with a fake admin login (`ADMIN_PASSWORD`). Deployed by hand with `kubectl apply` from `cluedo-vitry/k8s/` on the homelab cluster, not through brassberry-gitops.
