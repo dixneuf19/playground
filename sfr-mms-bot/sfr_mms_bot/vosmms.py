@@ -1,8 +1,8 @@
+import html
 import logging
 import mimetypes
-from dataclasses import dataclass
-from html.parser import HTMLParser
-from urllib.parse import urljoin, urlparse
+import re
+from dataclasses import dataclass, field
 
 import httpx2
 
@@ -12,19 +12,13 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://www.vosmms.com/"
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"
-MEDIA_ATTRS = {
-    "img": "src",
-    "video": "src",
-    "audio": "src",
-    "source": "src",
-    "embed": "src",
-    "object": "data",
-    "iframe": "src",
-    "frame": "src",
-    "a": "href",
-}
-MEDIA_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".mp4", ".3gp", ".mov", ".amr", ".mp3", ".txt")
-MAX_FRAMES = 3
+PAGE_ENCODING = "iso-8859-15"
+
+# viewMessage.jsp lists the parts in JS: new Attachement(name, type, isReadable, downloadUrl, displayUrl)
+ATTACHMENT_RE = re.compile(r'new\s+Attachement\(\s*"([^"]*)"\s*,\s*"([^"]*)"\s*,\s*"[^"]*"\s*,\s*"([^"]*)"')
+# The MMS text is copied in one block per player (image, video, audio, error) or in contentTexte when text-only.
+TEXT_RE = re.compile(r'<div\s+(?:id="\w+Texte"\s+class="texte"|class="contentTexte")\s*>(.*?)</div>', re.S | re.I)
+TYPE_FALLBACK = {"IMAGE": "image/jpeg", "VIDEO": "video/mp4", "AUDIO": "audio/mpeg", "TEXT": "text/plain"}
 
 
 class LoginError(Exception):
@@ -38,88 +32,63 @@ class Part:
     data: bytes
 
 
-class _LinkCollector(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self.links: list[tuple[str, str]] = []
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        wanted = MEDIA_ATTRS.get(tag)
-        for name, value in attrs:
-            if name == wanted and value:
-                self.links.append((tag, value))
+@dataclass
+class Mms:
+    text: str = ""
+    parts: list[Part] = field(default_factory=list)
 
 
-def _same_site(url: str) -> bool:
-    return urlparse(url).hostname == urlparse(BASE_URL).hostname
+@dataclass
+class Attachment:
+    name: str
+    kind: str
+    url: str
+
+    @property
+    def content_type(self) -> str:
+        guessed, _ = mimetypes.guess_type(self.name)
+        if not guessed:
+            return TYPE_FALLBACK.get(self.kind, "application/octet-stream")
+        major, subtype = guessed.split("/", 1)
+        # mimetypes says audio/3gpp for every .3gp, trust the site's kind for the major type.
+        if self.kind in ("IMAGE", "VIDEO", "AUDIO") and major != self.kind.lower():
+            return f"{self.kind.lower()}/{subtype}"
+        return guessed
 
 
-def collect_links(html: str, page_url: str) -> tuple[list[str], list[str]]:
-    """Split the links of a page into media URLs and frame URLs to follow, both on vosmms.com only."""
-    collector = _LinkCollector()
-    collector.feed(html)
-    media: list[str] = []
-    frames: list[str] = []
-    for tag, value in collector.links:
-        url = urljoin(page_url, value)
-        if not _same_site(url):
-            continue
-        path = urlparse(url).path.lower()
-        if tag in ("iframe", "frame"):
-            frames.append(url)
-        elif tag == "a" and not path.endswith(MEDIA_EXTENSIONS):
-            continue
-        elif url not in media:
-            media.append(url)
-    return media, frames
+def parse_attachments(page: str) -> list[Attachment]:
+    return [Attachment(name, kind, html.unescape(url)) for name, kind, url in ATTACHMENT_RE.findall(page)]
 
 
-def _filename(url: str, content_type: str, index: int) -> str:
-    name = urlparse(url).path.rsplit("/", 1)[-1]
-    if "." in name:
-        return name
-    return f"part{index}{mimetypes.guess_extension(content_type) or ''}"
+def parse_text(page: str) -> str:
+    for block in TEXT_RE.findall(page):
+        text = re.sub(r"<br\s*/?>", "\n", block, flags=re.I)
+        text = html.unescape(re.sub(r"<[^>]+>", "", text)).strip()
+        if text:
+            return text
+    return ""
 
 
-def fetch_mms(notice: MmsNotice, client: httpx2.Client | None = None) -> list[Part]:
+def fetch_mms(notice: MmsNotice, client: httpx2.Client | None = None) -> Mms:
     own_client = client is None
-    client = client or httpx2.Client(
-        base_url=BASE_URL, headers={"User-Agent": USER_AGENT}, timeout=30, follow_redirects=False
-    )
+    client = client or httpx2.Client(base_url=BASE_URL, headers={"User-Agent": USER_AGENT}, timeout=30)
     try:
         client.get("/").raise_for_status()
-        response = client.post("/loginSubmit.jsp", data={"MSISDN": notice.number, "PWD": notice.password})
-        location = response.headers.get("location", "")
-        if response.is_redirect and "error=" in location:
-            raise LoginError("vosmms.com refused the number or password (an MMS expires after 14 days)")
-        while response.is_redirect:
-            response = client.get(urljoin(str(response.url), location))
-            location = response.headers.get("location", "")
-        response.raise_for_status()
+        login = client.post("/loginSubmit.jsp", data={"MSISDN": notice.number, "PWD": notice.password})
+        if not login.is_redirect or "error=" in login.headers.get("location", ""):
+            raise LoginError("vosmms.com a refusé le numéro ou le mot de passe (un MMS expire au bout de 14 jours)")
+        view = client.get(login.headers["location"], follow_redirects=True)
+        view.raise_for_status()
+        page = view.content.decode(PAGE_ENCODING, errors="replace")
 
-        pages = [response]
-        media: list[str] = []
-        seen_frames: set[str] = set()
-        while pages:
-            page = pages.pop(0)
-            page_media, frames = collect_links(page.text, str(page.url))
-            media += [url for url in page_media if url not in media]
-            for frame in frames:
-                if frame not in seen_frames and len(seen_frames) < MAX_FRAMES:
-                    seen_frames.add(frame)
-                    pages.append(client.get(frame, follow_redirects=True))
-        logger.info("Found %d candidate part(s) behind %d page(s)", len(media), 1 + len(seen_frames))
-
-        parts: list[Part] = []
-        for index, url in enumerate(media, 1):
-            part = client.get(url, follow_redirects=True)
-            if part.status_code != 200 or not part.content:
-                continue
-            content_type = part.headers.get("content-type", "application/octet-stream").split(";")[0].strip()
-            if content_type.startswith("text/html"):
-                continue
-            parts.append(Part(_filename(url, content_type, index), content_type, part.content))
-        return parts
+        mms = Mms(text=parse_text(page))
+        attachments = parse_attachments(page)
+        logger.info("MMS has %d attachment(s) and %s text", len(attachments), "some" if mms.text else "no")
+        for attachment in attachments:
+            response = client.get(attachment.url, follow_redirects=True)
+            response.raise_for_status()
+            mms.parts.append(Part(attachment.name, attachment.content_type, response.content))
+        return mms
     finally:
         if own_client:
             client.close()

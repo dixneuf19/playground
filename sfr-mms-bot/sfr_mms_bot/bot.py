@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from telegram import Message, Update
+from telegram.error import BadRequest
 from telegram.ext import Application, ContextTypes, MessageHandler, filters
 
 from sfr_mms_bot import config
@@ -15,16 +16,27 @@ logger = logging.getLogger(__name__)
 
 
 async def send_part(message: Message, part: Part, caption: str) -> None:
-    if part.content_type.startswith("text/"):
-        await message.reply_text(part.data.decode("utf-8", errors="replace") or "(empty text)")
-    elif part.content_type in ("image/jpeg", "image/png", "image/webp", "image/bmp"):
-        await message.reply_photo(part.data, caption=caption, filename=part.filename)
-    elif part.content_type == "image/gif":
-        await message.reply_animation(part.data, caption=caption, filename=part.filename)
-    elif part.content_type.startswith("video/"):
-        await message.reply_video(part.data, caption=caption, filename=part.filename)
-    else:
-        await message.reply_document(part.data, caption=caption, filename=part.filename)
+    if part.content_type == "text/plain":
+        try:
+            text = part.data.decode("utf-8")
+        except UnicodeDecodeError:
+            text = part.data.decode("iso-8859-15")
+        if text.strip():
+            await message.reply_text(text)
+        return
+    try:
+        if part.content_type in ("image/jpeg", "image/png", "image/webp"):
+            await message.reply_photo(part.data, caption=caption, filename=part.filename)
+            return
+        if part.content_type == "image/gif":
+            await message.reply_animation(part.data, caption=caption, filename=part.filename)
+            return
+        if part.content_type in ("video/mp4", "video/quicktime"):
+            await message.reply_video(part.data, caption=caption, filename=part.filename)
+            return
+    except BadRequest as e:
+        logger.warning("Telegram refused a %s as media (%s), sending it as a file", part.content_type, e)
+    await message.reply_document(part.data, caption=caption, filename=part.filename)
 
 
 async def handle_message(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -40,7 +52,7 @@ async def handle_message(update: Update, _context: ContextTypes.DEFAULT_TYPE) ->
     logger.info("Fetching an MMS")
     status = await message.reply_text(f"📨 Je récupère le MMS de {notice.sender}…")
     try:
-        parts = await asyncio.to_thread(fetch_mms, notice)
+        mms = await asyncio.to_thread(fetch_mms, notice)
     except LoginError as e:
         await status.edit_text(f"❌ {e}")
         return
@@ -49,12 +61,14 @@ async def handle_message(update: Update, _context: ContextTypes.DEFAULT_TYPE) ->
         await status.edit_text("❌ Échec de la récupération sur vosmms.com, réessaie plus tard.")
         return
 
-    logger.info("Got %d part(s): %s", len(parts), ", ".join(p.content_type for p in parts))
-    if not parts:
-        await status.edit_text("🤷 Connecté à vosmms.com, mais je n'ai trouvé aucun contenu dans ce MMS.")
+    logger.info("Got %d part(s): %s", len(mms.parts), ", ".join(p.content_type for p in mms.parts))
+    if not mms.parts and not mms.text:
+        await status.edit_text("🤷 Connecté à vosmms.com, mais ce MMS est vide.")
         return
-    await status.edit_text(f"📨 MMS de {notice.sender} ({len(parts)} partie(s))")
-    for part in parts:
+    await status.edit_text(f"📨 MMS de {notice.sender}")
+    if mms.text:
+        await message.reply_text(mms.text)
+    for part in mms.parts:
         await send_part(message, part, caption=f"De {notice.sender}")
 
 
