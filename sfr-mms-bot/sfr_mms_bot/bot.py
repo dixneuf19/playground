@@ -5,13 +5,10 @@ from telegram import Message, Update
 from telegram.error import BadRequest
 from telegram.ext import Application, ContextTypes, MessageHandler, filters
 
-from sfr_mms_bot import config
+from sfr_mms_bot import config, logs
 from sfr_mms_bot.parser import ParseError, parse_sms
 from sfr_mms_bot.vosmms import LoginError, Part, fetch_mms
 
-logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("httpx2").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
@@ -73,7 +70,9 @@ async def handle_message(update: Update, _context: ContextTypes.DEFAULT_TYPE) ->
 
 
 def main() -> None:
+    logs.setup([])
     token, allowed_users = config.load()
+    logs.setup([token])
     app = Application.builder().token(token).build()
     # Messages from anyone else never reach the handler, so they get no reply at all.
     app.add_handler(
