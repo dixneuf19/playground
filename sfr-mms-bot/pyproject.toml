@@ -1,0 +1,38 @@
+[project]
+name = "sfr-mms-bot"
+version = "0.1.0"
+description = "Telegram bot fetching SFR MMS from vosmms.com"
+authors = [
+    { name = "Julen Dixneuf", email = "julen@loudnaround.org" }
+]
+dependencies = [
+    "httpx2>=2.16.0",
+    "python-dotenv>=1.0.0",
+    "python-telegram-bot>=22.0",
+]
+readme = "README.md"
+requires-python = "==3.15.*"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.12",
+    "pytest>=8",
+    "ty>=0.0.20",
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
+
+[tool.ty.src]
+include = ["sfr_mms_bot"]
+
+[tool.uv]
+exclude-newer = "3 days"
