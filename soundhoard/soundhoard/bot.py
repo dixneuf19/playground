@@ -40,7 +40,12 @@ async def handle_message(update: Update, _context: object) -> None:
         return
     url = url_match.group(0)
 
-    logger.info("Received URL: %s", url)
+    logger.info(
+        "Received URL: %s (update %s, message %s)",
+        url,
+        update.update_id,
+        message.message_id,
+    )
     reply = await message.reply_text("Extracting info...")
 
     try:
