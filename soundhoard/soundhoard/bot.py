@@ -5,6 +5,7 @@ from telegram import Update
 from telegram.ext import Application, MessageHandler, filters
 from telegram.helpers import escape_markdown
 
+from . import logs
 from .config import (
     DOWNLOAD_DIR,
     TELEGRAM_ALLOWED_USERS,
@@ -12,11 +13,7 @@ from .config import (
 )
 from .downloader import DownloadRegistry, download_with_retry, extract_info
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-)
-logging.getLogger("httpx").setLevel(logging.WARNING)
+logs.setup([TELEGRAM_BOT_TOKEN])
 logger = logging.getLogger(__name__)
 
 registry = DownloadRegistry(DOWNLOAD_DIR)
@@ -43,7 +40,12 @@ async def handle_message(update: Update, _context: object) -> None:
         return
     url = url_match.group(0)
 
-    logger.info("Received URL: %s", url)
+    logger.info(
+        "Received URL: %s (update %s, message %s)",
+        url,
+        update.update_id,
+        message.message_id,
+    )
     reply = await message.reply_text("Extracting info...")
 
     try:
