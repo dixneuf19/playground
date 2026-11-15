@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 
@@ -47,7 +48,7 @@ async def handle_message(update: Update, _context: object) -> None:
     reply = await message.reply_text("Extracting info...")
 
     try:
-        tracks = extract_info(url)
+        tracks = await asyncio.to_thread(extract_info, url)
     except Exception as e:
         logger.exception("Failed to extract info from %s", url)
         await reply.edit_text(f"Not a supported URL: {e}")
@@ -98,7 +99,9 @@ async def handle_message(update: Update, _context: object) -> None:
         )
         try:
             logger.info("Downloading %s (%s)", track.label, track.key)
-            downloaded = download_with_retry(track.url, DOWNLOAD_DIR)
+            downloaded = await asyncio.to_thread(
+                download_with_retry, track.url, DOWNLOAD_DIR
+            )
             registry.register(track.key, downloaded.path, downloaded.title)
             logger.info("Saved %s", downloaded.path)
             done.append(downloaded.title)
