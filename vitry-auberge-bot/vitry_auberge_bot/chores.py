@@ -50,7 +50,6 @@ CHORES: tuple[Chore, ...] = (
         message="🟤 Ce soir on sort la <b>poubelle marron</b> (ordures ménagères) !",
         weekdays=frozenset({MON, FRI}),
         start=EVENING,
-        reminders=every(2, until=4),
         skippable=True,
     ),
     Chore(

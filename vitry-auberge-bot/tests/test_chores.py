@@ -17,8 +17,12 @@ def test_brown_bin_on_monday_and_friday():
 
 
 def test_bin_reminders_every_two_hours_until_midnight():
-    times = CHORES_BY_ID["poubelle-marron"].reminder_times(MONDAY)
-    assert times == [at(MONDAY, 22), at(date(2026, 10, 6), 0)]
+    times = CHORES_BY_ID["poubelle-jaune"].reminder_times(WEDNESDAY_ODD_WEEK)
+    assert times == [at(WEDNESDAY_ODD_WEEK, 22), at(date(2026, 10, 8), 0)]
+
+
+def test_brown_bin_has_no_reminder():
+    assert CHORES_BY_ID["poubelle-marron"].reminders == ()
 
 
 def test_glass_only_on_even_weeks():
@@ -38,9 +42,9 @@ def test_cleaning_has_no_reminder():
 
 
 def test_reminders_keep_wall_clock_across_dst():
-    # Last Sunday of October 2026 is the 25th: Monday the 26th is the first day of winter time
-    day = date(2026, 10, 26)
-    assert [t.hour for t in CHORES_BY_ID["poubelle-marron"].reminder_times(day)] == [22, 0]
+    # Last Sunday of October 2026 is the 25th: Wednesday the 28th is in winter time
+    day = date(2026, 10, 28)
+    assert [t.hour for t in CHORES_BY_ID["poubelle-jaune"].reminder_times(day)] == [22, 0]
 
 
 def test_upcoming_lists_week_in_order():
@@ -55,12 +59,12 @@ def test_upcoming_lists_week_in_order():
 
 
 def test_in_progress_after_midnight_belongs_to_previous_day():
-    assert [(d, c.id) for d, c in in_progress(at(date(2026, 10, 5), 23))] == [(MONDAY, "poubelle-marron")]
-    assert in_progress(at(date(2026, 10, 6), 0, 30)) == []
+    assert [(d, c.id) for d, c in in_progress(at(date(2026, 10, 7), 23))] == [(WEDNESDAY_ODD_WEEK, "poubelle-jaune")]
+    assert in_progress(at(date(2026, 10, 8), 0, 30)) == []
 
 
-def test_in_progress_vegetables_and_bin_overlap():
-    assert {c.id for _, c in in_progress(at(MONDAY, 20, 30))} == {"legumes", "poubelle-marron"}
+def test_brown_bin_is_never_in_progress():
+    assert {c.id for _, c in in_progress(at(MONDAY, 20, 30))} == {"legumes"}
 
 
 def test_only_brown_bin_and_glass_can_be_skipped():
