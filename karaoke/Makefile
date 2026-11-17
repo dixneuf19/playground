@@ -2,7 +2,7 @@ format:
 	uv run ruff format
 	uv run ruff check --fix
 
-ESLINT = npm:eslint@10.14.0
+ESLINT = npm:eslint@10.15.0
 
 check-format:
 	uv run ruff format --check
