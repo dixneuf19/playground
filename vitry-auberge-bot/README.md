@@ -13,9 +13,9 @@ All chores live in [`vitry_auberge_bot/chores.py`](vitry_auberge_bot/chores.py).
 | Chore | When | Reminders |
 | --- | --- | --- |
 | Poubelle marron | Mon, Fri 20:00 | none |
-| Poubelle jaune | Wed 20:00 | 22:00, 00:00 |
-| Verre | Wed 20:00, even ISO weeks | 22:00, 00:00 |
-| Légumes du Rungis à Bizet | Mon 17:00 | 19:00, 21:00 |
+| Poubelle jaune | Wed 20:00 | 22:00 |
+| Verre | Wed 20:00, even ISO weeks | none |
+| Légumes du Rungis à Bizet | Mon 17:00 | 20:00 |
 | Ménage hebdo | Sun 19:00 | none |
 
 ## La Fourche deliveries

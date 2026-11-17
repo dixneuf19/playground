@@ -36,11 +36,6 @@ class Chore:
         return max([self.start_at(day), *self.reminder_times(day)])
 
 
-def every(hours: int, until: int) -> tuple[timedelta, ...]:
-    """Reminder offsets every `hours` hours, up to `until` hours after the start."""
-    return tuple(timedelta(hours=h) for h in range(hours, until + 1, hours))
-
-
 EVENING = time(20, 0, tzinfo=TZ)
 
 CHORES: tuple[Chore, ...] = (
@@ -58,7 +53,7 @@ CHORES: tuple[Chore, ...] = (
         message="🟡 Ce soir on sort la <b>poubelle jaune</b> (recyclables) !",
         weekdays=frozenset({WED}),
         start=EVENING,
-        reminders=every(2, until=4),
+        reminders=(timedelta(hours=2),),
     ),
     Chore(
         id="verre",
@@ -66,7 +61,6 @@ CHORES: tuple[Chore, ...] = (
         message="🟢 Ce soir on sort le <b>verre</b> !",
         weekdays=frozenset({WED}),
         start=EVENING,
-        reminders=every(2, until=4),
         even_weeks_only=True,
         skippable=True,
     ),
@@ -76,7 +70,7 @@ CHORES: tuple[Chore, ...] = (
         message="🥕 Ce soir c'est la <b>récup des légumes du Rungis</b> à Bizet, entre 18h et 22h. Qui y va ?",
         weekdays=frozenset({MON}),
         start=time(17, 0, tzinfo=TZ),
-        reminders=(timedelta(hours=2), timedelta(hours=4)),
+        reminders=(timedelta(hours=3),),
     ),
     Chore(
         id="menage",
