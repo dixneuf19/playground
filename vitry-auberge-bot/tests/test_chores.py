@@ -16,9 +16,13 @@ def test_brown_bin_on_monday_and_friday():
     assert [chore.occurs_on(date(2026, 10, d)) for d in range(5, 12)] == [True, False, False, False, True, False, False]
 
 
-def test_bin_reminders_every_two_hours_until_midnight():
-    times = CHORES_BY_ID["poubelle-marron"].reminder_times(MONDAY)
-    assert times == [at(MONDAY, 22), at(date(2026, 10, 6), 0)]
+def test_yellow_bin_reminded_once_at_22h():
+    assert CHORES_BY_ID["poubelle-jaune"].reminder_times(WEDNESDAY_ODD_WEEK) == [at(WEDNESDAY_ODD_WEEK, 22)]
+
+
+def test_brown_bin_and_glass_have_no_reminder():
+    assert CHORES_BY_ID["poubelle-marron"].reminders == ()
+    assert CHORES_BY_ID["verre"].reminders == ()
 
 
 def test_glass_only_on_even_weeks():
@@ -30,7 +34,7 @@ def test_glass_only_on_even_weeks():
 def test_vegetables_reminders():
     chore = CHORES_BY_ID["legumes"]
     assert chore.start_at(MONDAY) == at(MONDAY, 17)
-    assert chore.reminder_times(MONDAY) == [at(MONDAY, 19), at(MONDAY, 21)]
+    assert chore.reminder_times(MONDAY) == [at(MONDAY, 20)]
 
 
 def test_cleaning_has_no_reminder():
@@ -38,9 +42,9 @@ def test_cleaning_has_no_reminder():
 
 
 def test_reminders_keep_wall_clock_across_dst():
-    # Last Sunday of October 2026 is the 25th: Monday the 26th is the first day of winter time
-    day = date(2026, 10, 26)
-    assert [t.hour for t in CHORES_BY_ID["poubelle-marron"].reminder_times(day)] == [22, 0]
+    # Last Sunday of October 2026 is the 25th: Wednesday the 28th is in winter time
+    day = date(2026, 10, 28)
+    assert [t.hour for t in CHORES_BY_ID["poubelle-jaune"].reminder_times(day)] == [22]
 
 
 def test_upcoming_lists_week_in_order():
@@ -54,13 +58,13 @@ def test_upcoming_lists_week_in_order():
     ]
 
 
-def test_in_progress_after_midnight_belongs_to_previous_day():
-    assert [(d, c.id) for d, c in in_progress(at(date(2026, 10, 5), 23))] == [(MONDAY, "poubelle-marron")]
-    assert in_progress(at(date(2026, 10, 6), 0, 30)) == []
+def test_in_progress_until_last_reminder():
+    assert [(d, c.id) for d, c in in_progress(at(WEDNESDAY_ODD_WEEK, 21))] == [(WEDNESDAY_ODD_WEEK, "poubelle-jaune")]
+    assert in_progress(at(WEDNESDAY_ODD_WEEK, 22, 30)) == []
 
 
-def test_in_progress_vegetables_and_bin_overlap():
-    assert {c.id for _, c in in_progress(at(MONDAY, 20, 30))} == {"legumes", "poubelle-marron"}
+def test_brown_bin_is_never_in_progress():
+    assert in_progress(at(MONDAY, 20, 30)) == []
 
 
 def test_only_brown_bin_and_glass_can_be_skipped():
