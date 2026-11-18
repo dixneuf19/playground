@@ -48,7 +48,7 @@ def test_reminders_keep_wall_clock_across_dst():
 
 
 def test_upcoming_lists_week_in_order():
-    chores = [chore.id for _, chore in upcoming(at(MONDAY, 12))]
+    chores = [chore.id for _, chore in upcoming(at(MONDAY, 12), {})]
     assert chores == [
         "legumes",
         "poubelle-marron",
@@ -69,6 +69,33 @@ def test_brown_bin_is_never_in_progress():
 
 def test_only_brown_bin_and_glass_can_be_skipped():
     assert {chore_id for chore_id, chore in CHORES_BY_ID.items() if chore.skippable} == {"poubelle-marron", "verre"}
+
+
+def test_brown_bin_muted_for_the_next_two_pickups():
+    brown = CHORES_BY_ID["poubelle-marron"]
+    # Done on a Monday: Friday and the next Monday are muted, the Friday after rings
+    assert [
+        d for d in range(6, 20) if brown.occurs_on(date(2026, 10, d)) and not brown.muted_on(date(2026, 10, d), MONDAY)
+    ] == [16, 19]
+    # Done on a Friday: Monday and Friday are muted, the Monday after rings
+    friday = date(2026, 10, 9)
+    assert [brown.muted_on(date(2026, 10, d), friday) for d in (12, 16, 19)] == [True, True, False]
+
+
+def test_glass_muted_for_one_month():
+    glass = CHORES_BY_ID["verre"]
+    assert glass.muted_on(date(2026, 10, 28), WEDNESDAY_EVEN_WEEK)
+    assert not glass.muted_on(date(2026, 11, 11), WEDNESDAY_EVEN_WEEK)
+
+
+def test_not_muted_without_done_or_for_other_chores():
+    assert not CHORES_BY_ID["poubelle-marron"].muted_on(date(2026, 10, 9), None)
+    assert not CHORES_BY_ID["poubelle-jaune"].muted_on(date(2026, 10, 14), WEDNESDAY_ODD_WEEK)
+
+
+def test_upcoming_hides_muted_chores():
+    chores = [chore.id for _, chore in upcoming(at(MONDAY, 21), {"poubelle-marron": MONDAY})]
+    assert chores == ["poubelle-jaune", "menage", "legumes"]
 
 
 def test_format_when_in_french():
