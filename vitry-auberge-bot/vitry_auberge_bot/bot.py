@@ -2,7 +2,7 @@ import html
 import logging
 import os
 from datetime import date, datetime, timedelta
-from typing import cast
+from typing import Any, cast
 
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyParameters, Update, User
@@ -20,7 +20,17 @@ from telegram.ext import (
 )
 
 from vitry_auberge_bot import lafourche
-from vitry_auberge_bot.chores import CHORES, CHORES_BY_ID, TZ, Chore, format_when, in_progress, upcoming
+from vitry_auberge_bot.chores import (
+    CHORES,
+    CHORES_BY_ID,
+    TZ,
+    Chore,
+    LastDone,
+    format_when,
+    in_progress,
+    upcoming,
+)
+from vitry_auberge_bot.done_store import DoneStore
 from vitry_auberge_bot.tracker import Occurrence, Tracker
 
 load_dotenv()
@@ -41,8 +51,20 @@ REMINDER_PREFIXES = (
 )
 
 tracker = Tracker()
+last_done: LastDone = {}
+done_store: DoneStore | None = None
 orders: lafourche.OrderSource | None = None
 store: lafourche.Store | None = None
+
+
+def db_settings() -> dict[str, Any]:
+    return {
+        "host": os.getenv("DB_HOST", "localhost"),
+        "port": int(os.getenv("DB_PORT") or 5432),
+        "database": os.getenv("DB_NAME", "vitry_auberge_bot"),
+        "user": os.getenv("DB_USER"),
+        "password": os.getenv("DB_PASSWORD"),
+    }
 
 
 def done_keyboard(occurrence: Occurrence) -> InlineKeyboardMarkup:
@@ -83,6 +105,9 @@ async def start_chore(context: ContextTypes.DEFAULT_TYPE) -> None:
     now = datetime.now(TZ)
     if not chore.occurs_on(now.date()):
         return
+    if chore.muted_on(now.date(), last_done.get(chore.id)):
+        logger.info("Chore %s is muted since it was done on %s", chore.id, last_done[chore.id])
+        return
     logger.info("Starting chore %s", chore.id)
     occurrence = tracker.get(chore, now.date())
     await send_for(context, occurrence, chore.message)
@@ -107,6 +132,8 @@ async def mark_done(
     if not tracker.acknowledge(occurrence, who, skipped):
         return
     logger.info("Chore %s %s by %s", occurrence.chore.id, "skipped" if skipped else "done", who)
+    if occurrence.chore.mute_days and not skipped:
+        await record_done(occurrence, who)
     for message_id in occurrence.message_ids:
         try:
             await context.bot.edit_message_reply_markup(CHAT_ID, message_id, reply_markup=None)
@@ -120,6 +147,19 @@ async def mark_done(
         if occurrence.message_ids
         else None,
     )
+
+
+async def record_done(occurrence: Occurrence, who: str) -> None:
+    chore_id = occurrence.chore.id
+    if chore_id in last_done and last_done[chore_id] > occurrence.day:
+        return
+    last_done[chore_id] = occurrence.day
+    if done_store is None:
+        return
+    try:
+        await done_store.record(chore_id, occurrence.day, who)
+    except Exception:
+        logger.exception("Could not save that chore %s was done: the mute is lost on restart", chore_id)
 
 
 async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -175,7 +215,7 @@ async def show_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def show_upcoming(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     assert update.effective_message is not None
-    lines = [f"• {format_when(when)} : {chore.label}" for when, chore in upcoming(datetime.now(TZ))]
+    lines = [f"• {format_when(when)} : {chore.label}" for when, chore in upcoming(datetime.now(TZ), last_done)]
     await update.effective_message.reply_text("\n".join(lines) or "Rien de prévu 🎉")
 
 
@@ -185,6 +225,8 @@ async def resume_in_progress(application: Application) -> None:
     job_queue = application.job_queue
     assert job_queue is not None
     for day, chore in in_progress(now):
+        if chore.muted_on(day, last_done.get(chore.id)):
+            continue
         logger.info("Resuming reminders for chore %s of %s", chore.id, day)
         schedule_reminders(job_queue, chore, day, now)
 
@@ -225,19 +267,18 @@ async def remind_orders(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def post_init(application: Application) -> None:
-    global orders, store
+    global orders, store, done_store
+    if os.getenv("DB_HOST"):
+        done_store = await DoneStore.connect(**db_settings())
+        last_done.update(await done_store.last_done())
+    else:
+        logger.info("DB_HOST is not set: chore mutes are lost on restart")
     await resume_in_progress(application)
     if not LAFOURCHE_EMAIL:
         logger.info("LAFOURCHE_EMAIL is not set: La Fourche deliveries are not followed")
         return
     orders = lafourche.LaFourcheClient(LAFOURCHE_EMAIL, LAFOURCHE_PASSWORD)
-    store = await lafourche.Store.connect(
-        host=os.getenv("DB_HOST", "localhost"),
-        port=int(os.getenv("DB_PORT") or 5432),
-        database=os.getenv("DB_NAME", "vitry_auberge_bot"),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD"),
-    )
+    store = await lafourche.Store.connect(**db_settings())
     job_queue = application.job_queue
     assert job_queue is not None
     for index, when in enumerate(lafourche.POLL_TIMES):
@@ -250,6 +291,8 @@ async def post_init(application: Application) -> None:
 async def post_shutdown(application: Application) -> None:
     if store is not None:
         await store.close()
+    if done_store is not None:
+        await done_store.close()
 
 
 def main() -> None:

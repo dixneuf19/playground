@@ -6,17 +6,19 @@ Each reminder comes with a "✅ C'est fait" button. Clicking it, reacting to the
 
 The brown bin and glass also get a "🙅 Pas besoin" button, for the evenings when they are not worth taking out.
 
+Once the brown bin or glass is marked done, the bot stays silent about it for a while: 10 days for the brown bin (the next two pickups) and 28 days for glass (the next pickup). "🙅 Pas besoin" does not mute. The day each chore was last done is kept in Postgres when `DB_HOST` is set, otherwise the mute is lost on restart.
+
 ## Schedule
 
 All chores live in [`vitry_auberge_bot/chores.py`](vitry_auberge_bot/chores.py). Edit the file and rebuild to change them.
 
-| Chore | When | Reminders |
-| --- | --- | --- |
-| Poubelle marron | Mon, Fri 20:00 | none |
-| Poubelle jaune | Wed 20:00 | 22:00 |
-| Verre | Wed 20:00, even ISO weeks | none |
-| Légumes du Rungis à Bizet | Mon 17:00 | 20:00 |
-| Ménage hebdo | Sun 19:00 | none |
+| Chore | When | Reminders | Muted once done |
+| --- | --- | --- | --- |
+| Poubelle marron | Mon, Fri 20:00 | none | 10 days |
+| Poubelle jaune | Wed 20:00 | 22:00 | no |
+| Verre | Wed 20:00, even ISO weeks | none | 28 days |
+| Légumes du Rungis à Bizet | Mon 17:00 | 20:00 | no |
+| Ménage hebdo | Sun 19:00 | none | no |
 
 ## La Fourche deliveries
 
@@ -52,7 +54,7 @@ VITRY_TEST_DATABASE_URL=postgresql://postgres:test@127.0.0.1:55433/postgres make
 
 ## Commands
 
-- `/prochains`: reminders of the next 7 days
+- `/prochains`: reminders of the next 7 days, without the muted ones
 - `/chatid`: id of the current chat
 - `/help`
 

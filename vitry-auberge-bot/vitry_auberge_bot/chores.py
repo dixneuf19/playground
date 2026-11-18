@@ -20,11 +20,16 @@ class Chore:
     even_weeks_only: bool = False
     # Offers a "Pas besoin" button, for bins that are not always worth taking out
     skippable: bool = False
+    # Once done, stay silent on the next occurrences starting within this many days
+    mute_days: int = 0
 
     def occurs_on(self, day: date) -> bool:
         if day.weekday() not in self.weekdays:
             return False
         return not (self.even_weeks_only and day.isocalendar().week % 2)
+
+    def muted_on(self, day: date, last_done: date | None) -> bool:
+        return last_done is not None and last_done < day < last_done + timedelta(days=self.mute_days)
 
     def start_at(self, day: date) -> datetime:
         return datetime.combine(day, self.start, tzinfo=TZ)
@@ -46,6 +51,7 @@ CHORES: tuple[Chore, ...] = (
         weekdays=frozenset({MON, FRI}),
         start=EVENING,
         skippable=True,
+        mute_days=10,
     ),
     Chore(
         id="poubelle-jaune",
@@ -63,6 +69,7 @@ CHORES: tuple[Chore, ...] = (
         start=EVENING,
         even_weeks_only=True,
         skippable=True,
+        mute_days=28,
     ),
     Chore(
         id="legumes",
@@ -84,12 +91,17 @@ CHORES: tuple[Chore, ...] = (
 CHORES_BY_ID = {chore.id: chore for chore in CHORES}
 
 
-def upcoming(now: datetime, days: int = 7) -> list[tuple[datetime, Chore]]:
-    """Chore occurrences starting between `now` and `days` days later, sorted."""
+type LastDone = dict[str, date]
+
+
+def upcoming(now: datetime, last_done: LastDone, days: int = 7) -> list[tuple[datetime, Chore]]:
+    """Chore occurrences starting between `now` and `days` days later, sorted, without the muted ones."""
     result = []
     for offset in range(days + 1):
         day = now.date() + timedelta(days=offset)
         for chore in CHORES:
+            if chore.muted_on(day, last_done.get(chore.id)):
+                continue
             if chore.occurs_on(day) and now <= chore.start_at(day) <= now + timedelta(days=days):
                 result.append((chore.start_at(day), chore))
     return sorted(result, key=lambda item: item[0])
