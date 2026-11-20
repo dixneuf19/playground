@@ -21,8 +21,11 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
-html, body { margin: 0; height: 100%; max-width: 100%; overflow-x: hidden; }
+/* No height or overflow on body: on phones that makes it a second scroller,
+   which gets stuck once the keyboard has opened and hides the bottom of the page. */
+html { overflow-x: hidden; }
 body {
+  margin: 0; min-height: 100vh; min-height: 100dvh;
   background: var(--sand);
   color: var(--jungle);
   font-family: "Karla", system-ui, sans-serif;
@@ -108,6 +111,10 @@ input::placeholder { color: #5d6f63; }
 
 .guest .panel { display: grid; gap: 12px; padding: 16px; border-radius: 16px; background: var(--lagoon); color: #06231f; }
 .guest .panel .hint { opacity: 1; font-weight: 600; }
+.wifi { margin: 0; padding: 10px 12px; border: 3px solid var(--jungle); border-radius: 12px; background: var(--cream); color: var(--jungle); }
+.wifi b, .wifi span { display: block; }
+.wifi b { font-size: 1.1rem; }
+.wifi code { font: 800 1.15rem ui-monospace, monospace; user-select: all; }
 
 .poster { max-width: 900px; padding-top: 6vh; justify-items: center; }
 .qrs { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; }
@@ -212,13 +219,15 @@ body.tv { overflow: hidden; cursor: none; background: var(--jungle); color: var(
 
 .tv #idle {
   position: fixed; inset: 0; display: none; flex-direction: column; justify-content: space-between; align-items: flex-start;
-  padding: 6vh 4vw 4.5vh; background: #b9c7cf url("idle.jpg") center 55% / cover;
+  padding: 6vh 4vw 4.5vh; background: #3f7a3a url("idle.jpg") center 62% / cover;
 }
 body.idle #idle { display: flex; }
 .tv #idle .top { display: flex; flex-direction: column; align-items: flex-start; gap: 2.6vh; }
-.tv #idle .logo { font-size: 8.4vw; }
+.tv #idle .logo { font-size: 8.4vw; color: var(--cream); }
+/* The photo is busy: a dark edge keeps the name readable on the leaves. */
+.tv #idle .logo .word { -webkit-text-stroke: .09em var(--jungle); paint-order: stroke fill; text-shadow: 0 .06em 0 var(--jungle); }
 .tv #idle .scan {
-  display: flex; align-items: center; gap: 2vw; padding: 1.2vw 2.2vw 1.2vw 1.2vw; max-width: 44vw;
+  align-self: flex-end; display: flex; align-items: center; gap: 2vw; padding: 1.2vw 2.2vw 1.2vw 1.2vw; max-width: 44vw;
   border: .4vw solid var(--wood); border-radius: 1.4vw; background: var(--cream); color: var(--jungle);
 }
 .tv #idle .scan img { width: 14vw; border-radius: .4vw; }
@@ -288,7 +297,7 @@ body.idle #banner { top: 7vh; left: auto; right: 4vw; transform: rotate(-1.5deg)
 .tv #corner-qr img { width: 100%; display: block; }
 
 .tv #ticker { position: fixed; right: 13vw; bottom: 4vh; z-index: 5; display: grid; gap: .8vh; justify-items: end; max-width: 45vw; }
-body.idle #ticker { right: 4vw; }
+body.idle #ticker { right: auto; left: 4vw; justify-items: start; }
 .tv #ticker div {
   padding: .5vw 1.3vw; border-radius: 1.2vw 1.2vw 0 1.2vw; background: var(--cream); color: var(--jungle); font-size: 1.7vw;
   animation: slide-in .3s;

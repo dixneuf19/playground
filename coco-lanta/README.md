@@ -24,6 +24,7 @@ Live TV for a Koh-Lanta themed party ("Coco Lanta": Rouge Faucille against Rouge
 | `COCO_LIVEKIT_URL` | The LiveKit server as browsers reach it (`wss://...`) |
 | `COCO_LIVEKIT_API_KEY`, `COCO_LIVEKIT_API_SECRET` | A key pair of that server |
 | `COCO_REGIE_PASSWORD` | Control room password (empty: open) |
+| `COCO_WIFI_NAME`, `COCO_WIFI_PASSWORD` | Optional: the house Wi-Fi, shown to guests who want to film |
 
 ## Development
 
@@ -42,4 +43,4 @@ Browsers only give the camera to https pages or `localhost`. For a run without p
 
 ## Look
 
-A beach by day: sand, jungle green, lagoon, wooden planks (`static/app.css`, the logo is `templates/_logo.html`, the sickle and hammer icons are in `static/common.js`). The waiting screen photo (`static/idle.jpg`) is "Mu Ko Lanta NP (26)" by Krzysztof Golik, from Wikimedia Commons, licensed CC BY-SA 4.0.
+A beach by day: sand, jungle green, lagoon, wooden planks (`static/app.css`, the logo is `templates/_logo.html`, the sickle and hammer icons are in `static/common.js`). The waiting screen photo (`static/idle.jpg`) is the owner's own: the garden pool, our lagoon.

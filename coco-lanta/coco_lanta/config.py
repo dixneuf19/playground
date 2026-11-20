@@ -23,6 +23,9 @@ class Settings:
         default_factory=lambda: _env("LIVEKIT_API_SECRET", "secret")
     )
     livekit_room: str = field(default_factory=lambda: _env("ROOM", "coco-lanta"))
+    # Shown to guests who want to film: cameras only work on the house Wi-Fi.
+    wifi_name: str = field(default_factory=lambda: _env("WIFI_NAME"))
+    wifi_password: str = field(default_factory=lambda: _env("WIFI_PASSWORD"))
     # Empty: anyone opening /regie runs the show.
     regie_password: str = field(default_factory=lambda: _env("REGIE_PASSWORD"))
 

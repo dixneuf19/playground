@@ -70,7 +70,7 @@ def create_app(cfg: Settings = settings) -> FastAPI:
         return templates.TemplateResponse(
             request,
             f"{name}.html",
-            {"emoji": EMOJI, "teams": TEAMS, "static": static_url},
+            {"emoji": EMOJI, "teams": TEAMS, "static": static_url, "cfg": cfg},
         )
 
     @app.get("/healthz")

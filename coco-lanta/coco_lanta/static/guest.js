@@ -59,9 +59,19 @@ function cameraTrack() {
   return room.localParticipant.getTrackPublication(LivekitClient.Track.Source.Camera)?.track;
 }
 
+const NO_WIFI = "Impossible de joindre le plateau. Es-tu bien sur le Wi-Fi de la maison ? En 4G ou 5G, la caméra ne marche pas.";
+const GO_LABEL = $("go").textContent;
+
+function startError(err) {
+  if (err.name === "NotAllowedError") return "Autorise la caméra pour ce site, puis réessaie.";
+  if (err.name === "NotFoundError" || err.name === "NotReadableError") return "Impossible d'ouvrir la caméra de ce téléphone.";
+  return NO_WIFI; // everything else is the network: the video only travels on the house Wi-Fi
+}
+
 async function start() {
   $("error").textContent = "";
   $("go").disabled = true;
+  $("go").textContent = "Connexion au plateau…";
   const name = nameInput.value.trim();
   store("name", name);
   try {
@@ -81,14 +91,14 @@ async function start() {
     });
     room.on(RoomEvent.Reconnecting, () => setStatus("Reconnexion…"));
     room.on(RoomEvent.Reconnected, () => setStatus(""));
-    room.on(RoomEvent.Disconnected, () => { if (me) stopCamera("Connexion vidéo perdue. Relance la caméra."); });
+    room.on(RoomEvent.Disconnected, () => { if (me) stopCamera("Connexion vidéo perdue. Vérifie que tu es sur le Wi-Fi de la maison, puis relance la caméra."); });
     await room.connect(me.url, me.token);
     await room.localParticipant.setCameraEnabled(true);
     // No microphone (refused, or none) still makes a fine camera.
     try { await room.localParticipant.setMicrophoneEnabled(true); } catch { $("mic").classList.add("off"); }
     cameraTrack().attach($("preview"));
   } catch (err) {
-    await stopCamera(err.name === "NotAllowedError" ? "Autorise la caméra pour ce site, puis réessaie." : `Impossible de démarrer : ${err.message}`);
+    await stopCamera(startError(err));
     return;
   }
   $("setup").hidden = true;
@@ -121,6 +131,8 @@ async function stopCamera(message) {
   $("live").hidden = true;
   $("setup").hidden = false;
   $("error").textContent = message || "";
+  $("go").textContent = GO_LABEL;
+  if (message) $("camera").hidden = false; // keep the way back to the camera in sight
   refreshForm();
 }
 

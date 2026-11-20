@@ -152,3 +152,13 @@ def test_kicked_camera_is_closed(client: TestClient) -> None:
             while True:
                 cam.receive_json()
         assert closed.value.code == 4403
+
+
+def test_wifi_password_is_shown_only_when_set(client: TestClient) -> None:
+    assert "Mot de passe" not in client.get("/").text
+    with_wifi = TestClient(
+        create_app(Settings(wifi_name="Lagon", wifi_password="s3same"))
+    )
+    page = with_wifi.get("/").text
+    assert "<code>Lagon</code>" in page
+    assert "<code>s3same</code>" in page
