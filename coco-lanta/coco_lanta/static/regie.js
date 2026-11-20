@@ -29,13 +29,17 @@ function render() {
       el = document.createElement("div");
       el.className = "cam";
       el.dataset.id = cam.id;
-      el.innerHTML = '<video autoplay playsinline muted></video><div class="label"><b></b></div><button class="kick" title="Couper cette caméra">✕</button>';
+      el.innerHTML = '<video autoplay playsinline muted></video><div class="label"><b></b></div><button class="sound" title="Son de cette caméra dans la mosaïque"></button><button class="kick" title="Couper cette caméra">✕</button>';
       cams.append(el);
       videos.get(cam.id)?.attach(el.querySelector("video"));
     }
     el.classList.toggle("on", s.on_air.includes(cam.id));
+    const heard = s.heard.includes(cam.id);
+    el.querySelector(".sound").textContent = heard ? "🔊" : "🔇";
+    el.querySelector(".sound").classList.toggle("on", heard);
     el.querySelector("b").textContent = cam.name;
   }
+  cams.dataset.layout = s.layout;
   $("empty").hidden = s.cameras.length > 0;
   $("auto").classList.toggle("on", s.auto && s.layout === "solo");
   document.querySelectorAll("#layouts button").forEach((b) => b.classList.toggle("on", b.dataset.layout === s.layout));
@@ -62,7 +66,9 @@ function comment(msg) {
 cams.addEventListener("click", (e) => {
   const cam = e.target.closest(".cam");
   if (!cam) return;
-  if (e.target.closest(".kick")) {
+  if (e.target.closest(".sound")) {
+    cmd("hear", { id: cam.dataset.id, on: !current.heard.includes(cam.dataset.id) });
+  } else if (e.target.closest(".kick")) {
     if (confirm("Couper cette caméra ?")) cmd("kick", { id: cam.dataset.id });
   } else {
     cmd("take", { id: cam.dataset.id });

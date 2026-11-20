@@ -158,6 +158,8 @@ class Hub:
         match msg.get("cmd"):
             case "take":
                 show.take(str(msg.get("id")), now)
+            case "hear":
+                show.hear(str(msg.get("id")), bool(msg.get("on")))
             case "auto":
                 show.set_auto(now)
             case "layout":

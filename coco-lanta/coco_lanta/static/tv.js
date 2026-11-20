@@ -29,13 +29,14 @@ function render() {
     const cam = cams.get(id);
     const onAir = s.on_air.includes(id);
     t.el.hidden = !cam;
-    // Every camera at once is a racket: the mosaic only plays the first one.
-    const heard = s.audio && (s.layout === "mosaic" ? id === s.on_air[0] : onAir);
+    // Every camera at once is a racket: in the mosaic a camera is silent
+    // until the control room turns its sound on.
+    const heard = s.audio && (s.layout === "mosaic" ? s.heard.includes(id) : onAir);
     t.el.classList.toggle("on", onAir);
-    t.el.classList.toggle("heard", heard && s.layout === "mosaic" && s.on_air.length > 1);
+    t.el.classList.toggle("heard", heard && s.layout === "mosaic");
     t.audio?.setVolume(heard ? 1 : 0);
     if (!cam) continue;
-    // Same order as the show: in the mosaic the first tile is the one heard.
+    // Same order as the show and as the control room's thumbnails.
     t.el.style.order = s.on_air.indexOf(id);
     t.el.querySelector("b").textContent = cam.name;
   }
