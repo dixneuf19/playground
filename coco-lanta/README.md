@@ -39,3 +39,7 @@ make sri            # Recompute the CDN integrity hashes after a version bump
 ```
 
 Browsers only give the camera to https pages or `localhost`. For a run without phones, Chromium has fake cameras: `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream`.
+
+## Look
+
+A beach by day: sand, jungle green, lagoon, wooden planks (`static/app.css`, the logo is `templates/_logo.html`, the sickle and hammer icons are in `static/common.js`). The waiting screen photo (`static/idle.jpg`) is "Mu Ko Lanta NP (26)" by Krzysztof Golik, from Wikimedia Commons, licensed CC BY-SA 4.0.

@@ -82,7 +82,7 @@ def create_app(cfg: Settings = settings) -> FastAPI:
         """One QR code for every guest: react, and film if they want to."""
         out = io.BytesIO()
         segno.make(f"{base_url(request)}/", error="m").save(
-            out, kind="svg", scale=10, border=2, dark="#1a0d08", light="#fff4dc"
+            out, kind="svg", scale=10, border=2, dark="#0e3b2c", light="#fff7e2"
         )
         return Response(out.getvalue(), media_type="image/svg+xml")
 
