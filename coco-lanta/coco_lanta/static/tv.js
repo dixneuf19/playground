@@ -36,7 +36,9 @@ function render() {
     t.el.querySelector("b").textContent = cam.name;
   }
   stage.dataset.layout = s.layout;
-  stage.dataset.count = s.on_air.length;
+  const count = s.on_air.length;
+  stage.dataset.count = count;
+  stage.style.setProperty("--cols", count <= 1 ? 1 : count <= 4 ? 2 : count <= 9 ? 3 : 4);
   document.body.classList.toggle("idle", s.on_air.length === 0);
   for (const team of ["faucille", "marteau"]) $(`score-${team}`).textContent = s.scores[team];
   $("banner").hidden = !s.banner;

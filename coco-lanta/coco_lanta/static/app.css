@@ -249,11 +249,14 @@ body.idle #stage { display: none; }
 .tile .label b { font-family: var(--display); font-weight: 400; font-size: 3vw; line-height: 1.1; }
 
 /* Duel: two cameras side by side. Mosaic: a grid of everyone. */
-.tv #stage[data-layout="duel"], .tv #stage[data-layout="mosaic"] { display: grid; gap: .5vw; background: var(--gold); }
-.tv #stage[data-layout="duel"] { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
-.tv #stage[data-layout="mosaic"] { grid-template-columns: 1fr 1fr; }
-.tv #stage[data-layout="mosaic"][data-count="1"] { grid-template-columns: 1fr; }
-.tv #stage[data-layout="mosaic"][data-count="5"], .tv #stage[data-layout="mosaic"][data-count="6"] { grid-template-columns: 1fr 1fr 1fr; }
+.tv #stage[data-layout="duel"] { display: grid; gap: .5vw; background: var(--gold); grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
+/* Mosaic: every camera keeps its whole 16:9 picture. --cols comes from tv.js
+   (2 columns up to 4 cameras, 3 up to 9, then 4), and a last row that is not
+   full is centred, so 3 or 5 cameras leave no hole in a corner. */
+.tv #stage[data-layout="mosaic"] { display: flex; flex-wrap: wrap; justify-content: center; align-content: center; background: var(--jungle); }
+.tv #stage[data-layout="mosaic"] .tile.on { flex: 0 0 calc(100% / var(--cols, 2)); aspect-ratio: 16 / 9; border: .2vw solid var(--gold); }
+/* One or two cameras fill the height instead, like solo and duel. */
+.tv #stage[data-layout="mosaic"][data-count="1"] .tile.on, .tv #stage[data-layout="mosaic"][data-count="2"] .tile.on { aspect-ratio: auto; height: 100%; }
 .tv #stage:not([data-layout="solo"]) .tile { position: relative; display: none; }
 .tv #stage:not([data-layout="solo"]) .tile.on { display: block; }
 .tv #stage:not([data-layout="solo"]) .tile video { object-fit: cover; }
