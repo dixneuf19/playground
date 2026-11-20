@@ -84,3 +84,19 @@ uv sync             # Install dependencies
 make dev            # Serve the site on :8000
 make test           # Smoke test: start server.py and fetch pages
 ```
+
+### coco-lanta
+
+Live TV for a Koh-Lanta themed party: phones publish their camera to a LiveKit server, the TV page plays what the control room (or the automatic director in `coco_lanta/show.py`) puts on air. FastAPI + one WebSocket, plain JS pages (no build step), state in memory (one replica). UI text is in French. See `coco-lanta/README.md`.
+
+**Common commands (run from `coco-lanta/`):**
+
+```bash
+uv sync             # Install dependencies
+make livekit        # LiveKit server in dev mode (needs livekit-server on the PATH)
+make dev            # Run the app on :8000 against it
+make format         # Format + lint fix
+make check-format   # Check formatting + linting
+make typecheck      # Type check with ty
+make test           # Unit tests
+```

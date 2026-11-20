@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %} · régie{% endblock %}
+{% block body_class %}page regie{% endblock %}
+{% block body %}
+<main>
+  <header>
+    <h1 class="brand small">Régie <span>☭</span></h1>
+    <div class="seg" id="layouts">
+      <button data-layout="solo">Solo</button>
+      <button data-layout="duel">Duel</button>
+      <button data-layout="mosaic">Mosaïque</button>
+    </div>
+    <button id="auto" class="toggle">AUTO</button>
+  </header>
+
+  <section id="cams"></section>
+  <p id="empty" class="hint">Aucune caméra. Fais scanner le QR code de la page d'accueil.</p>
+
+  <section class="panel">
+    <h2>Scores</h2>
+    <div class="scores">
+      {% for key in ("faucille", "marteau") %}
+      <div class="score team-{{ key }}">
+        <span>{{ teams[key] }}</span>
+        <button data-score="{{ key }}" data-delta="-1">−</button>
+        <b id="score-{{ key }}">0</b>
+        <button data-score="{{ key }}" data-delta="1">+</button>
+      </div>
+      {% endfor %}
+    </div>
+    <button id="score-reset" class="link">Remettre à zéro</button>
+  </section>
+
+  <section class="panel">
+    <h2>Chrono <b id="timer"></b></h2>
+    <div class="chips">
+      <button data-timer="30">30 s</button>
+      <button data-timer="60">1 min</button>
+      <button data-timer="120">2 min</button>
+      <button data-timer="300">5 min</button>
+      <button id="timer-toggle">⏯</button>
+      <button id="timer-reset">✕</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Bandeau</h2>
+    <form id="banner" class="row">
+      <input id="banner-text" maxlength="60" autocomplete="off" placeholder="Épreuve des poteaux">
+      <button class="btn btn-primary">Afficher</button>
+      <button type="button" id="banner-clear" class="btn">✕</button>
+    </form>
+    <h2>Plein écran</h2>
+    <div class="chips" id="stingers">
+      <button>La sentence est irrévocable</button>
+      <button>Épreuve d'immunité</button>
+      <button>Épreuve de confort</button>
+      <button>Le conseil</button>
+      <button>Victoire de Rouge Faucille</button>
+      <button>Victoire de Rouge Marteau</button>
+    </div>
+    <form id="stinger" class="row">
+      <input id="stinger-text" maxlength="60" autocomplete="off" placeholder="Autre annonce plein écran">
+      <button class="btn">Envoyer</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Télé</h2>
+    <div class="chips">
+      <button id="audio" class="toggle">🔊 Son</button>
+      <button id="qr" class="toggle">QR réactions</button>
+    </div>
+    <h2>Commentaires</h2>
+    <div id="comments" class="hint">Rien pour l'instant.</div>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}
+{% include "_livekit.html" %}
+<script src="{{ static('common.js') }}"></script>
+<script src="{{ static('regie.js') }}"></script>
+{% endblock %}
