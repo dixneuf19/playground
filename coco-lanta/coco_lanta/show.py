@@ -8,12 +8,7 @@ cameras come back on their own when their sockets reconnect.
 from dataclasses import dataclass
 from typing import Any
 
-TEAMS = {
-    "faucille": "Rouge Faucille",
-    "marteau": "Rouge Marteau",
-    "reporter": "Reporter",
-}
-SCORING = ("faucille", "marteau")
+TEAMS = {"faucille": "Rouge Faucille", "marteau": "Rouge Marteau"}
 LAYOUTS = ("solo", "duel", "mosaic")
 
 ROTATE = 20.0  # auto: seconds on a camera before moving to the next one
@@ -27,7 +22,6 @@ GRACE = 6.0  # a camera whose socket dropped keeps its place this long
 class Camera:
     id: str
     name: str
-    team: str
     gone_at: float | None = None
 
 
@@ -37,9 +31,8 @@ class Show:
         self.auto = True
         self.layout = "solo"
         self.program: str | None = None  # on air in the solo layout
-        # The duel layout shows one camera per team.
-        self.sides: dict[str, str | None] = dict.fromkeys(SCORING)
-        self.scores = dict.fromkeys(SCORING, 0)
+        self.duo: list[str] = []  # the two cameras of the duel layout
+        self.scores = dict.fromkeys(TEAMS, 0)
         self.banner = ""
         self.audio = True
         self.qr = True
@@ -50,12 +43,12 @@ class Show:
 
     # --- cameras ------------------------------------------------------------
 
-    def join(self, cam_id: str, name: str, team: str, now: float) -> None:
+    def join(self, cam_id: str, name: str, now: float) -> None:
         if cam_id in self.cameras:  # back within the grace period
             cam = self.cameras[cam_id]
-            cam.name, cam.team, cam.gone_at = name, team, None
+            cam.name, cam.gone_at = name, None
         else:
-            self.cameras[cam_id] = Camera(cam_id, name, team)
+            self.cameras[cam_id] = Camera(cam_id, name)
         self._fix(now)
 
     def leave(self, cam_id: str, now: float) -> None:
@@ -70,18 +63,18 @@ class Show:
         if self.layout == "mosaic":
             return list(self.cameras)
         if self.layout == "duel":
-            return [cam_id for cam_id in self.sides.values() if cam_id]
+            return list(self.duo)
         return [self.program] if self.program else []
 
     # --- the director -------------------------------------------------------
 
     def take(self, cam_id: str, now: float) -> None:
         """The control room picks a camera."""
-        cam = self.cameras.get(cam_id)
-        if cam is None:
+        if cam_id not in self.cameras:
             return
-        if self.layout == "duel" and cam.team in self.sides:
-            self.sides[cam.team] = cam_id
+        if self.layout == "duel":  # replaces the camera picked longest ago
+            if cam_id not in self.duo:
+                self.duo = [*self.duo[-1:], cam_id]
             return
         self.layout = "solo"
         self.auto = False
@@ -139,12 +132,9 @@ class Show:
         if self.program not in self.cameras:
             self.auto = True  # the manual pick left: the show goes on
             self._switch(self._next(), now)
-        for team, cam_id in self.sides.items():
-            cam = self.cameras.get(cam_id or "")
-            if cam is None or cam.team != team:
-                self.sides[team] = next(
-                    (c.id for c in self.cameras.values() if c.team == team), None
-                )
+        self.duo = [cam_id for cam_id in self.duo if cam_id in self.cameras]
+        spare = [cam_id for cam_id in self.cameras if cam_id not in self.duo]
+        self.duo += spare[: 2 - len(self.duo)]
 
     # --- scores, timer, texts -----------------------------------------------
 
@@ -167,14 +157,11 @@ class Show:
 
     def snapshot(self) -> dict[str, Any]:
         return {
-            "cameras": [
-                {"id": c.id, "name": c.name, "team": c.team}
-                for c in self.cameras.values()
-            ],
+            "cameras": [{"id": c.id, "name": c.name} for c in self.cameras.values()],
             "auto": self.auto,
             "layout": self.layout,
             "program": self.program,
-            "sides": self.sides,
+            "duo": self.duo,
             "on_air": self.on_air(),
             "scores": self.scores,
             "banner": self.banner,

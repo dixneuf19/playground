@@ -13,7 +13,7 @@ function tile(id) {
   if (!t) {
     const el = document.createElement("div");
     el.className = "tile";
-    el.innerHTML = '<video autoplay playsinline muted></video><div class="label"><span class="icon"></span><b></b><small></small></div>';
+    el.innerHTML = `<video autoplay playsinline muted></video><div class="label"><span class="icon">${teamIcon("camera")}</span><b></b></div>`;
     stage.append(el);
     t = { el, audio: null };
     tiles.set(id, t);
@@ -32,11 +32,8 @@ function render() {
     t.el.classList.toggle("on", onAir);
     t.audio?.setVolume(s.audio && onAir ? 1 : 0);
     if (!cam) continue;
-    t.el.dataset.team = cam.team;
-    t.el.style.order = s.layout === "duel" && cam.team === "marteau" ? 2 : 1;
-    t.el.querySelector(".icon").innerHTML = teamIcon(cam.team);
+    t.el.style.order = s.layout === "duel" ? s.duo.indexOf(id) : 0;
     t.el.querySelector("b").textContent = cam.name;
-    t.el.querySelector("small").textContent = TEAMS[cam.team];
   }
   stage.dataset.layout = s.layout;
   stage.dataset.count = s.on_air.length;
@@ -78,7 +75,12 @@ function float(emoji) {
   const fx = $("fx");
   if (fx.childElementCount > 80) return;
   const el = document.createElement("span");
-  el.textContent = emoji;
+  if (emoji in TEAMS) { // a cheer: the team's icon on its colour
+    el.className = `cheer team-${emoji}`;
+    el.innerHTML = teamIcon(emoji);
+  } else {
+    el.textContent = emoji;
+  }
   el.style.left = `${5 + Math.random() * 90}%`;
   el.style.fontSize = `${3 + Math.random() * 3}vw`;
   el.style.animationDuration = `${3 + Math.random() * 2}s`;

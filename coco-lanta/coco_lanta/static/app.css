@@ -6,14 +6,13 @@
   --cream: #fff4dc;
   --faucille: #e3212f;
   --marteau: #a3122b;
-  --reporter: #3a6b4a;
   --display: "Bangers", "Impact", sans-serif;
 }
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
-html, body { margin: 0; height: 100%; }
+html, body { margin: 0; height: 100%; max-width: 100%; overflow-x: hidden; }
 body {
   background: radial-gradient(ellipse at 50% 110%, #7a2408 0%, var(--wood) 45%, var(--night) 100%) fixed;
   color: var(--cream);
@@ -62,17 +61,15 @@ input:focus { outline: none; border-color: var(--gold); }
 /* --- phone pages -------------------------------------------------------- */
 
 body.page { padding: 20px 16px 40px; }
+.guest .panel { background: rgba(0, 0, 0, .3); border-radius: 16px; padding: 14px; display: grid; gap: 12px; }
+.guest .lead { margin: 0; }
 .card, .poster { max-width: 520px; margin: 0 auto; text-align: center; display: grid; gap: 16px; }
 .card label { text-align: left; display: grid; gap: 6px; font-weight: 600; }
 
-.teams { display: grid; gap: 10px; }
-.team {
-  border: 3px solid transparent; border-radius: 14px; padding: 16px; font-weight: 800; font-size: 1.1rem;
-  background: var(--faucille); opacity: .6;
-}
+.cheers { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.team { border: 0; border-radius: 14px; padding: 16px 8px; font-weight: 800; background: var(--faucille); }
 .team-marteau { background: var(--marteau); }
-.team-reporter { background: var(--reporter); }
-.team.on { opacity: 1; border-color: var(--gold); }
+.team.pop { animation: pop .25s; }
 
 .poster { max-width: 900px; padding-top: 4vh; }
 .qrs { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; }
@@ -90,12 +87,11 @@ body.page { padding: 20px 16px 40px; }
 }
 .emojis button.pop { animation: pop .25s; }
 @keyframes pop { 50% { transform: scale(1.35); background: rgba(255, 210, 63, .4); } }
-#comment { display: grid; gap: 8px; }
 
 /* --- camera page -------------------------------------------------------- */
 
 #live { position: fixed; inset: 0; background: #000; }
-#preview { width: 100%; height: 100%; object-fit: cover; }
+#preview { width: 100%; height: 100%; object-fit: contain; }
 #live::after {
   content: ""; position: absolute; inset: 0; pointer-events: none;
   border: 8px solid transparent; transition: border-color .2s;
@@ -198,11 +194,8 @@ body.idle #stage { display: none; }
   background: linear-gradient(90deg, var(--faucille), rgba(227, 33, 47, .75));
   border-left: .6vw solid var(--gold); transform: skewX(-8deg); box-shadow: 0 .4vw 1.5vw rgba(0, 0, 0, .5);
 }
-.tile[data-team="marteau"] .label { background: linear-gradient(90deg, var(--marteau), rgba(163, 18, 43, .75)); }
-.tile[data-team="reporter"] .label { background: linear-gradient(90deg, var(--reporter), rgba(58, 107, 74, .75)); }
-.tile .label .icon { grid-row: span 2; font-size: 3.4vw; }
+.tile .label .icon { font-size: 2.6vw; }
 .tile .label b { font-family: var(--display); font-weight: 400; font-size: 2.6vw; letter-spacing: .05em; line-height: 1; }
-.tile .label small { font-size: 1.1vw; text-transform: uppercase; letter-spacing: .15em; opacity: .9; }
 
 /* Duel: one team per half. Mosaic: a grid of everyone. */
 .tv #stage[data-layout="duel"], #stage[data-layout="mosaic"] { display: grid; gap: .4vw; background: var(--gold); }
@@ -258,6 +251,9 @@ body.idle #banner { top: auto; bottom: 5vh; }
 
 .tv #fx { position: fixed; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
 .tv #fx span { position: absolute; bottom: -8vw; animation: rise linear forwards; }
+.tv #fx .cheer { display: grid; place-items: center; width: 1.6em; height: 1.6em; border-radius: 50%; background: var(--faucille); border: .08em solid var(--gold); }
+.tv #fx .cheer.team-marteau { background: var(--marteau); }
+.tv #fx .cheer svg { width: 1em; height: 1em; fill: var(--gold); }
 @keyframes rise {
   to { transform: translateY(-115vh) rotate(25deg); opacity: 0; }
 }

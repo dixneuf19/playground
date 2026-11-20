@@ -17,7 +17,7 @@ from typing import Any
 
 import segno
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -29,7 +29,9 @@ from coco_lanta.tokens import access_token
 
 HERE = Path(__file__).parent
 STATIC = HERE / "static"
-PAGES = ("cam", "tv", "regie", "react")
+ROLES = ("cam", "tv", "regie", "react")  # of a socket
+PAGES = {"": "guest", "tv": "tv", "regie": "regie", "affiche": "poster"}
+MOVED = ("cam", "react")  # QR codes of the first version
 UNAUTHORIZED = 4401  # close code: the control room asks for the password
 
 templates = Jinja2Templates(directory=HERE / "templates")
@@ -44,7 +46,6 @@ def static_url(name: str) -> str:
 
 class CamRequest(BaseModel):
     name: str
-    team: str
 
 
 def create_app(cfg: Settings = settings) -> FastAPI:
@@ -76,32 +77,30 @@ def create_app(cfg: Settings = settings) -> FastAPI:
     async def healthz() -> dict[str, bool]:
         return {"ok": True}
 
-    @app.get("/", response_class=HTMLResponse)
-    async def index(request: Request) -> HTMLResponse:
-        return page(request, "index")
-
-    @app.get("/{name}", response_class=HTMLResponse)
-    async def any_page(request: Request, name: str) -> HTMLResponse:
-        if name not in PAGES:
-            raise HTTPException(404)
-        return page(request, name)
-
-    @app.get("/qr/{name}.svg")
-    async def qr(request: Request, name: str) -> Response:
-        if name not in ("cam", "react"):
-            raise HTTPException(404)
+    @app.get("/qr.svg")
+    async def qr(request: Request) -> Response:
+        """One QR code for every guest: react, and film if they want to."""
         out = io.BytesIO()
-        segno.make(f"{base_url(request)}/{name}", error="m").save(
+        segno.make(f"{base_url(request)}/", error="m").save(
             out, kind="svg", scale=10, border=2, dark="#1a0d08", light="#fff4dc"
         )
         return Response(out.getvalue(), media_type="image/svg+xml")
+
+    @app.get("/", response_class=HTMLResponse)
+    @app.get("/{name}", response_class=HTMLResponse)
+    async def any_page(request: Request, name: str = "") -> Response:
+        if name in MOVED:
+            return RedirectResponse("/")
+        if name not in PAGES:
+            raise HTTPException(404)
+        return page(request, PAGES[name])
 
     @app.post("/api/cam")
     async def cam(body: CamRequest) -> dict[str, str]:
         """A phone becomes a camera: a LiveKit token that may only publish."""
         name = clean(body.name, NAME_MAX)
-        if not name or body.team not in TEAMS:
-            raise HTTPException(422, "Il faut un nom et une équipe")
+        if not name:
+            raise HTTPException(422, "Il faut un nom")
         identity = f"cam-{secrets.token_hex(4)}"
         return {
             "id": identity,
@@ -122,7 +121,7 @@ def create_app(cfg: Settings = settings) -> FastAPI:
     async def ws(socket: WebSocket) -> None:
         query = socket.query_params
         role = query.get("role", "react")
-        if role not in PAGES:
+        if role not in ROLES:
             await socket.close()
             return
         await socket.accept()
@@ -136,13 +135,13 @@ def create_app(cfg: Settings = settings) -> FastAPI:
             await socket.close(code=UNAUTHORIZED)
             return
         client = Client(socket, role)
-        name, team = clean(query.get("name"), NAME_MAX), query.get("team", "")
+        name = clean(query.get("name"), NAME_MAX)
         if role == "cam":
             client.cam_id = query.get("id", "")[:32]
-            if not client.cam_id.startswith("cam-") or not name or team not in TEAMS:
+            if not client.cam_id.startswith("cam-") or not name:
                 await socket.close()
                 return
-        await hub.join(client, name, team)
+        await hub.join(client, name)
         try:
             while True:
                 msg: Any = json.loads(await socket.receive_text())

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block body_class %}page guest{% endblock %}
+{% block body %}
+<main id="setup" class="card">
+  <h1 class="brand small">Coco <span>☭</span> Lanta</h1>
+  <input id="name" maxlength="24" autocomplete="off" placeholder="Ton nom">
+
+  <p class="lead">Tape, ça s'affiche sur la télé.</p>
+  <div class="cheers" id="cheers">
+    {% for key, label in teams.items() %}
+    <button type="button" class="team team-{{ key }}" data-emoji="{{ key }}"><span class="icon" data-icon="{{ key }}"></span> Allez {{ label }} !</button>
+    {% endfor %}
+  </div>
+  <div class="emojis" id="emojis">
+    {% for e in emoji %}<button type="button" data-emoji="{{ e }}">{{ e }}</button>{% endfor %}
+  </div>
+  <form id="comment" class="row">
+    <input id="text" maxlength="80" autocomplete="off" placeholder="Un commentaire, camarade ?" required>
+    <button class="btn btn-primary">Envoyer</button>
+  </form>
+
+  <button id="film" class="btn">📹 Filmer une épreuve</button>
+  <section id="camera" class="panel" hidden>
+    <p class="lead">Ton téléphone devient une caméra de l'émission.</p>
+    <button id="go" class="btn btn-primary" disabled>📹 Passer à l'antenne</button>
+    <p class="hint">Il faut ton nom, tout en haut. Reste sur le Wi-Fi de la maison, tiens le téléphone à l'horizontale et garde cette page ouverte.</p>
+  </section>
+  <p id="error" class="error"></p>
+</main>
+<section id="live" hidden>
+  <video id="preview" autoplay muted playsinline></video>
+  <div id="tally">EN ATTENTE</div>
+  <div id="status"></div>
+  <div class="controls">
+    <button id="flip" class="round" title="Changer de caméra">🔄</button>
+    <button id="mic" class="round" title="Micro">🎙️</button>
+    <button id="stop" class="round danger" title="Arrêter">⏹</button>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+{% include "_livekit.html" %}
+<script src="{{ static('common.js') }}"></script>
+<script src="{{ static('guest.js') }}"></script>
+{% endblock %}
