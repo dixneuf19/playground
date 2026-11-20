@@ -69,12 +69,13 @@ body.offline #offline { display: block; }
   background: var(--wood); color: var(--cream); font-weight: 800;
 }
 .btn-primary { background: var(--sun); color: #1c1206; border-bottom-color: var(--sun-dark); }
-.btn:disabled { opacity: .45; }
+.btn:disabled, .btn.off { opacity: .45; }
 input {
   width: 100%; height: 50px; padding: 0 14px; border-radius: 12px; border: 3px solid var(--jungle);
   background: var(--cream); font-size: 1.05rem;
 }
 input:focus { outline: 3px solid var(--sun); outline-offset: 1px; }
+input.missing { border-color: var(--faucille); outline: 3px solid var(--faucille); outline-offset: 1px; }
 input::placeholder { color: #5d6f63; }
 .row { display: flex; gap: 8px; }
 .row input { flex: 1; min-width: 0; }

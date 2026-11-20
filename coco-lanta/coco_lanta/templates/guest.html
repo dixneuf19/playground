@@ -4,6 +4,7 @@
 <header class="topbar"><h1 class="logo small">{% include "_logo.html" %}<span class="word"><span>Coco</span> <span>Lanta</span></span></h1></header>
 <main id="setup" class="card">
   <input id="name" maxlength="24" autocomplete="off" placeholder="Ton nom">
+  <p id="name-hint" class="error" hidden>Entre d'abord ton nom, juste au-dessus, pour filmer.</p>
 
   <p class="lead">Tape, ça s'affiche sur la télé.</p>
   <div class="cheers" id="cheers">
@@ -27,7 +28,7 @@
       {%- if cfg.wifi_password %}<span>Mot de passe : <code>{{ cfg.wifi_password }}</code></span>{% endif %}
       <span>En 4G ou 5G, la vidéo ne passe pas : la caméra ne démarrera pas.</span></p>
     <button id="go" class="btn btn-primary" disabled>📹 Passer à l'antenne</button>
-    <p class="hint">Il faut ton nom, tout en haut. Tiens le téléphone à l'horizontale et garde cette page ouverte.</p>
+    <p class="hint">Garde cette page ouverte pendant que tu filmes.</p>
   </section>
   <p id="error" class="error"></p>
 </main>

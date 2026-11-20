@@ -36,12 +36,30 @@ $("comment").addEventListener("submit", (e) => {
 
 // --- camera -----------------------------------------------------------------
 
+// Filming needs a name: until there is one the button is greyed out, and a
+// tap on it points at the name field instead of opening the camera panel.
 function refreshForm() {
-  $("go").disabled = !nameInput.value.trim();
+  const named = Boolean(nameInput.value.trim());
+  $("film").classList.toggle("off", !named);
+  $("film").setAttribute("aria-disabled", String(!named));
+  $("go").disabled = !named;
+  if (named) {
+    $("name-hint").hidden = true;
+    nameInput.classList.remove("missing");
+  } else {
+    $("camera").hidden = true;
+  }
 }
 refreshForm();
 nameInput.addEventListener("input", refreshForm);
 $("film").addEventListener("click", () => {
+  if (!nameInput.value.trim()) {
+    $("name-hint").hidden = false;
+    nameInput.classList.add("missing");
+    nameInput.scrollIntoView({ behavior: "smooth", block: "center" });
+    nameInput.focus({ preventScroll: true });
+    return;
+  }
   $("camera").hidden = !$("camera").hidden;
   if (!$("camera").hidden) $("camera").scrollIntoView({ behavior: "smooth" });
 });
