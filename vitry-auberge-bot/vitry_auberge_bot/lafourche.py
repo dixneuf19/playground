@@ -49,7 +49,6 @@ query GetCustomerOrderHistory($pageSize: Int, $cursor: String) {
       totalDiscounts
       totalTax
       totalShippingPriceSet { shopMoney { amount currencyCode } }
-      discountCodes
       noteAttributes { name value }
       updatedTimeSlot { deliveryDate startTime endTime }
       lineItems {
