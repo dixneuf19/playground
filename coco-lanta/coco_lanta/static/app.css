@@ -183,6 +183,13 @@ body.regie main { max-width: 900px; margin: 0 auto; padding: 0 14px 40px; displa
 }
 .cam video { width: 100%; height: 100%; object-fit: cover; }
 .cam .label { position: absolute; left: 0; bottom: 0; right: 0; padding: 4px 10px; background: var(--wood); color: var(--cream); text-align: left; }
+/* Per-camera sound only exists in the mosaic. */
+.cam .sound {
+  display: none; position: absolute; right: 4px; bottom: 4px; z-index: 1; width: 44px; height: 44px; border-radius: 50%;
+  border: 3px solid var(--cream); background: var(--jungle); font-size: 1.2rem;
+}
+#cams[data-layout="mosaic"] .cam .sound { display: block; }
+.cam .sound.on { background: var(--gold); border-color: #b98a12; }
 .cam .kick {
   position: absolute; top: 4px; right: 4px; width: 34px; height: 34px; border-radius: 50%; border: 0;
   background: var(--jungle); color: var(--cream);

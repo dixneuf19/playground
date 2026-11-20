@@ -131,3 +131,20 @@ def test_timer_pause_and_resume() -> None:
     assert (show.timer_ends, show.timer_left) == (530, None)
     show.timer_reset()
     assert show.snapshot()["timer"] == {"ends": None, "left": None}
+
+
+def test_mosaic_cameras_are_silent_until_turned_on() -> None:
+    show = show_with(3)
+    assert show.snapshot()["heard"] == []
+    show.hear("cam-1", True)
+    show.hear("nobody", True)
+    assert show.snapshot()["heard"] == ["cam-1"]
+    show.hear("cam-1", False)
+    assert show.snapshot()["heard"] == []
+
+
+def test_a_camera_that_leaves_is_no_longer_heard() -> None:
+    show = show_with(2)
+    show.hear("cam-0", True)
+    show.kick("cam-0", 1)
+    assert show.snapshot()["heard"] == []
