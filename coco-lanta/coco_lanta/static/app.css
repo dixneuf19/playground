@@ -247,6 +247,7 @@ body.idle #stage { display: none; }
 }
 .tile .label .icon { font-size: 2.6vw; }
 .tile .label b { font-family: var(--display); font-weight: 400; font-size: 3vw; line-height: 1.1; }
+.tile.heard .label::after { content: "🔊"; font-size: 2.2vw; }
 
 /* Duel: two cameras side by side. Mosaic: a grid of everyone. */
 .tv #stage[data-layout="duel"] { display: grid; gap: .5vw; background: var(--gold); grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
