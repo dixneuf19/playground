@@ -15,13 +15,14 @@ from typing import Any
 
 from fastapi import WebSocket
 
-from coco_lanta.show import SCORING, Show
+from coco_lanta.show import TEAMS, Show
 
 logger = logging.getLogger(__name__)
 
 SEND_TIMEOUT = 5  # a phone that stops reading is dropped, not waited for
 KICKED = 4403  # close code: the camera page stops and says so
 EMOJI = ("🔥", "☭", "🌴", "👏", "😂", "😱", "❤️", "🥥", "✊", "🐍")
+REACTIONS = (*EMOJI, *TEAMS)  # a team name floats up as its icon
 COMMENT_MAX = 80
 NAME_MAX = 24
 BANNER_MAX = 60
@@ -88,10 +89,10 @@ class Hub:
 
     # --- sockets ------------------------------------------------------------
 
-    async def join(self, client: Client, name: str = "", team: str = "") -> None:
+    async def join(self, client: Client, name: str = "") -> None:
         self.clients.add(client)
         if client.role == "cam":
-            self.show.join(client.cam_id, name, team, time.time())
+            self.show.join(client.cam_id, name, time.time())
         if not await self.sync():  # unchanged: nobody was sent anything
             await self._send([client], self._state())
 
@@ -137,7 +138,7 @@ class Hub:
         now = time.time()
         kind = msg.get("type")
         if kind == "react":
-            if msg.get("emoji") in EMOJI and client.reactions.take(now):
+            if msg.get("emoji") in REACTIONS and client.reactions.take(now):
                 await self._event(("tv",), type="react", emoji=msg["emoji"])
         elif kind == "comment":
             text = clean(msg.get("text"), COMMENT_MAX)
@@ -163,10 +164,10 @@ class Hub:
                 show.set_layout(str(msg.get("layout")), now)
             case "score":
                 team, delta = msg.get("team"), msg.get("delta")
-                if team in SCORING and delta in (1, -1):
+                if team in TEAMS and delta in (1, -1):
                     show.score(team, delta)
             case "score_reset":
-                show.scores = dict.fromkeys(SCORING, 0)
+                show.scores = dict.fromkeys(TEAMS, 0)
             case "timer_start":
                 seconds = msg.get("seconds")
                 if isinstance(seconds, int | float):

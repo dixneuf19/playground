@@ -1,30 +1,49 @@
-// Phone page: publish the camera and microphone to LiveKit, show the tally.
-const { Room, RoomEvent, Track, VideoPresets } = LivekitClient;
+// The guests' phone page: emoji and comments for the TV and, for those who
+// want to film, the camera and microphone published to LiveKit.
 
 const $ = (id) => document.getElementById(id);
 const nameInput = $("name");
-let team = stored("team");
 let me = null; // { id, url, token } once on air
 let room = null;
-let show = null;
+let camSocket = null;
 let wakeLock = null;
 let facing = "environment";
 
 nameInput.value = stored("name");
+nameInput.addEventListener("change", () => store("name", nameInput.value.trim()));
+
+// --- reactions --------------------------------------------------------------
+
+const show = connectShow("react", () => ({}), {});
+
+function react(e) {
+  const button = e.target.closest("button");
+  if (!button) return;
+  show.send({ type: "react", emoji: button.dataset.emoji });
+  button.classList.remove("pop");
+  void button.offsetWidth; // restart the animation
+  button.classList.add("pop");
+  navigator.vibrate?.(10);
+}
+$("emojis").addEventListener("click", react);
+$("cheers").addEventListener("click", react);
+
+$("comment").addEventListener("submit", (e) => {
+  e.preventDefault();
+  show.send({ type: "comment", name: nameInput.value, text: $("text").value });
+  $("text").value = "";
+});
+
+// --- camera -----------------------------------------------------------------
 
 function refreshForm() {
-  document.querySelectorAll("#teams button").forEach((b) => {
-    b.classList.toggle("on", b.dataset.team === team);
-  });
-  $("go").disabled = !nameInput.value.trim() || !team;
+  $("go").disabled = !nameInput.value.trim();
 }
 refreshForm();
 nameInput.addEventListener("input", refreshForm);
-$("teams").addEventListener("click", (e) => {
-  const button = e.target.closest("button");
-  if (!button) return;
-  team = button.dataset.team;
-  refreshForm();
+$("film").addEventListener("click", () => {
+  $("camera").hidden = !$("camera").hidden;
+  if (!$("camera").hidden) $("camera").scrollIntoView({ behavior: "smooth" });
 });
 
 async function keepAwake() {
@@ -37,7 +56,7 @@ document.addEventListener("visibilitychange", () => {
 function setStatus(text) { $("status").textContent = text; }
 
 function cameraTrack() {
-  return room.localParticipant.getTrackPublication(Track.Source.Camera)?.track;
+  return room.localParticipant.getTrackPublication(LivekitClient.Track.Source.Camera)?.track;
 }
 
 async function start() {
@@ -45,12 +64,13 @@ async function start() {
   $("go").disabled = true;
   const name = nameInput.value.trim();
   store("name", name);
-  store("team", team);
   try {
+    // Looked up here, not at load: reactions work even if the CDN did not answer.
+    const { Room, RoomEvent, VideoPresets } = LivekitClient;
     const response = await fetch("/api/cam", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, team }),
+      body: JSON.stringify({ name }),
     });
     if (!response.ok) throw new Error("Le serveur a refusé");
     me = await response.json();
@@ -75,7 +95,7 @@ async function start() {
   $("live").hidden = false;
   keepAwake();
   // Only now does the show know this camera: it is really publishing.
-  show = connectShow("cam", () => ({ id: me.id, name, team }), {
+  camSocket = connectShow("cam", () => ({ id: me.id, name }), {
     state(s) {
       const onAir = s.on_air.includes(me.id);
       document.body.classList.toggle("on-air", onAir);
@@ -91,13 +111,13 @@ async function start() {
 
 async function stopCamera(message) {
   me = null;
-  show?.close();
-  show = null;
+  camSocket?.close();
+  camSocket = null;
   const old = room;
   room = null;
   await old?.disconnect();
   wakeLock?.release().catch(() => {});
-  document.body.classList.remove("on-air", "offline");
+  document.body.classList.remove("on-air");
   $("live").hidden = true;
   $("setup").hidden = false;
   $("error").textContent = message || "";

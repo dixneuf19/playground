@@ -1,23 +1,19 @@
 // Shared by every page: the show socket (auto-reconnect), escaping, team art.
 /* exported connectShow, esc, TEAMS, teamIcon, formatTimer, stored, store */
 
-const TEAMS = {
-  faucille: "Rouge Faucille",
-  marteau: "Rouge Marteau",
-  reporter: "Reporter",
-};
+const TEAMS = { faucille: "Rouge Faucille", marteau: "Rouge Marteau" };
 
 const ICONS = {
   faucille:
-    '<svg viewBox="0 0 100 100"><path d="M34 6c26 2 46 22 46 46 0 20-15 36-34 36-8 0-15-2-21-7 5 2 9 3 14 3 15 0 27-12 27-28 0-22-14-40-32-50z"/><rect x="12" y="68" width="12" height="30" rx="5" transform="rotate(45 18 83)"/></svg>',
+    '<svg viewBox="0 0 100 100"><g transform="translate(0 -6)"><path d="M36 12A40 40 0 1 1 30 82L42 72A31 31 0 1 0 36 12Z"/><rect x="6" y="80.5" width="38" height="12" rx="6" transform="rotate(-40.4 25 86.5)"/></g></svg>',
   marteau:
-    '<svg viewBox="0 0 100 100"><g transform="rotate(-45 50 50)"><rect x="18" y="10" width="64" height="26" rx="4"/><rect x="43" y="32" width="14" height="62" rx="5"/></g></svg>',
-  reporter:
-    '<svg viewBox="0 0 100 100"><rect x="38" y="8" width="24" height="50" rx="12"/><path d="M26 44v6a24 24 0 0 0 48 0v-6h-7v6a17 17 0 0 1-34 0v-6z"/><rect x="46" y="72" width="8" height="16"/><rect x="32" y="86" width="36" height="7" rx="3"/></svg>',
+    '<svg viewBox="0 0 100 100"><g transform="translate(50 50) rotate(-45)"><rect x="-6.5" y="-33" width="13" height="84" rx="4"/><rect x="-23" y="-50" width="46" height="23" rx="3"/></g></svg>',
+  camera:
+    '<svg viewBox="0 0 24 24"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10.5l6-3v9l-6-3z"/></svg>',
 };
 
-function teamIcon(team) {
-  return ICONS[team] || "";
+function teamIcon(name) {
+  return ICONS[name] || "";
 }
 
 function esc(s) {

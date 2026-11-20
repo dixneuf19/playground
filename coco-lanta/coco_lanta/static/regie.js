@@ -29,13 +29,11 @@ function render() {
       el = document.createElement("div");
       el.className = "cam";
       el.dataset.id = cam.id;
-      el.innerHTML = '<video autoplay playsinline muted></video><div class="label"><span class="icon"></span><b></b></div><button class="kick" title="Couper cette caméra">✕</button>';
+      el.innerHTML = '<video autoplay playsinline muted></video><div class="label"><b></b></div><button class="kick" title="Couper cette caméra">✕</button>';
       cams.append(el);
       videos.get(cam.id)?.attach(el.querySelector("video"));
     }
-    el.dataset.team = cam.team;
     el.classList.toggle("on", s.on_air.includes(cam.id));
-    el.querySelector(".icon").innerHTML = teamIcon(cam.team);
     el.querySelector("b").textContent = cam.name;
   }
   $("empty").hidden = s.cameras.length > 0;

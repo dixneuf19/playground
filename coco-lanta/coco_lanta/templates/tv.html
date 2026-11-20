@@ -4,18 +4,20 @@
 {% block body %}
 <div id="gate">
   <div>
-    <h1 class="brand">Coco <span>☭</span> Lanta</h1>
+    <h1 class="logo">{% include "_logo.html" %}<span class="word"><span>Coco</span> <span>Lanta</span></span></h1>
     <button class="btn btn-primary" id="start">▶ Lancer l'émission</button>
     <p>Clique une fois pour autoriser le son et passer en plein écran.</p>
   </div>
 </div>
 
 <section id="idle">
-  <h1 class="brand">Coco <span>☭</span> Lanta</h1>
-  <p class="lead">L'émission reprend dans un instant, camarades.</p>
-  <div class="qrs">
-    <div class="qr"><img src="/qr/cam.svg" alt=""><b>📹 Deviens caméra</b></div>
-    <div class="qr"><img src="/qr/react.svg" alt=""><b>🔥 Réagis</b></div>
+  <div class="top">
+    <h1 class="logo">{% include "_logo.html" %}<span class="word"><span>Coco</span> <span>Lanta</span></span></h1>
+    <p class="plank">L'émission reprend dans un instant, camarades.</p>
+  </div>
+  <div class="scan">
+    <img src="/qr.svg" alt="">
+    <div><b>Scanne-moi</b><span>Envoie tes réactions sur la télé, ou filme une épreuve avec ton téléphone.</span></div>
   </div>
 </section>
 
@@ -28,7 +30,7 @@
 </div>
 <div id="timer" hidden></div>
 <div id="banner" hidden></div>
-<div id="corner-qr"><img src="/qr/react.svg" alt=""><span>Réagis !</span></div>
+<div id="corner-qr"><img src="/qr.svg" alt=""><span>Réagis · Filme</span></div>
 <div id="ticker"></div>
 <div id="fx"></div>
 <div id="stinger" hidden><span></span></div>

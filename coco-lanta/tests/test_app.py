@@ -38,7 +38,7 @@ def state(ws) -> dict:
     return receive(ws, "state")["show"]
 
 
-@pytest.mark.parametrize("path", ["/", "/cam", "/tv", "/regie", "/react", "/healthz"])
+@pytest.mark.parametrize("path", ["/", "/tv", "/regie", "/affiche", "/healthz"])
 def test_pages(client: TestClient, path: str) -> None:
     assert client.get(path).status_code == 200
 
@@ -47,14 +47,19 @@ def test_unknown_page(client: TestClient) -> None:
     assert client.get("/admin").status_code == 404
 
 
-def test_qr_points_at_the_public_url(client: TestClient) -> None:
-    response = client.get("/qr/cam.svg")
+def test_old_qr_codes_land_on_the_guest_page(client: TestClient) -> None:
+    for path in ("/cam", "/react"):
+        response = client.get(path, follow_redirects=False)
+        assert (response.status_code, response.headers["location"]) == (307, "/")
+
+
+def test_one_qr_code(client: TestClient) -> None:
+    response = client.get("/qr.svg")
     assert response.headers["content-type"] == "image/svg+xml"
-    assert client.get("/qr/tv.svg").status_code == 404
 
 
 def test_camera_token_may_only_publish(client: TestClient) -> None:
-    body = client.post("/api/cam", json={"name": " Denis ", "team": "faucille"}).json()
+    body = client.post("/api/cam", json={"name": " Denis "}).json()
     claims = jwt.decode(body["token"], CFG.livekit_api_secret, algorithms=["HS256"])
     assert claims["sub"] == body["id"]
     assert claims["iss"] == "key"
@@ -64,14 +69,8 @@ def test_camera_token_may_only_publish(client: TestClient) -> None:
     assert body["url"] == "wss://live.example"
 
 
-def test_camera_needs_a_name_and_a_team(client: TestClient) -> None:
-    assert (
-        client.post("/api/cam", json={"name": " ", "team": "faucille"}).status_code
-        == 422
-    )
-    assert (
-        client.post("/api/cam", json={"name": "A", "team": "bleu"}).status_code == 422
-    )
+def test_camera_needs_a_name(client: TestClient) -> None:
+    assert client.post("/api/cam", json={"name": " "}).status_code == 422
 
 
 def test_viewer_token_may_only_watch(client: TestClient) -> None:
@@ -96,11 +95,9 @@ def test_camera_joins_and_regie_runs_the_show(client: TestClient) -> None:
         client.websocket_connect("/ws?role=tv") as tv,
     ):
         assert state(regie)["cameras"] == []
-        with client.websocket_connect("/ws?role=cam&id=cam-1&name=Denis&team=marteau"):
+        with client.websocket_connect("/ws?role=cam&id=cam-1&name=Denis"):
             show = state(regie)
-            assert show["cameras"] == [
-                {"id": "cam-1", "name": "Denis", "team": "marteau"}
-            ]
+            assert show["cameras"] == [{"id": "cam-1", "name": "Denis"}]
             assert show["on_air"] == ["cam-1"]
 
             regie.send_json(
@@ -137,6 +134,8 @@ def test_reactions_and_comments_reach_the_tv(client: TestClient) -> None:
         phone.send_json({"type": "react", "emoji": "<script>"})
         phone.send_json({"type": "react", "emoji": "🔥"})
         assert receive(tv, "react") == {"type": "react", "emoji": "🔥"}
+        phone.send_json({"type": "react", "emoji": "marteau"})  # a team cheer
+        assert receive(tv, "react") == {"type": "react", "emoji": "marteau"}
         phone.send_json({"type": "comment", "name": "", "text": "x" * 200})
         msg = receive(tv, "comment")
         assert (msg["name"], len(msg["text"])) == ("Anonyme", 80)
@@ -145,9 +144,7 @@ def test_reactions_and_comments_reach_the_tv(client: TestClient) -> None:
 def test_kicked_camera_is_closed(client: TestClient) -> None:
     with (
         client.websocket_connect(REGIE) as regie,
-        client.websocket_connect(
-            "/ws?role=cam&id=cam-1&name=Denis&team=marteau"
-        ) as cam,
+        client.websocket_connect("/ws?role=cam&id=cam-1&name=Denis") as cam,
     ):
         state(cam)
         regie.send_json({"type": "cmd", "cmd": "kick", "id": "cam-1"})
