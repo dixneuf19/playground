@@ -112,7 +112,9 @@ input::placeholder { color: #5d6f63; }
 .guest .panel { display: grid; gap: 12px; padding: 16px; border-radius: 16px; background: var(--lagoon); color: #06231f; }
 .guest .panel .hint { opacity: 1; font-weight: 600; }
 .wifi { margin: 0; padding: 10px 12px; border: 3px solid var(--jungle); border-radius: 12px; background: var(--cream); color: var(--jungle); }
-.wifi b { display: block; font-size: 1.1rem; }
+.wifi b, .wifi span { display: block; }
+.wifi b { font-size: 1.1rem; }
+.wifi code { font: 800 1.15rem ui-monospace, monospace; user-select: all; }
 
 .poster { max-width: 900px; padding-top: 6vh; justify-items: center; }
 .qrs { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; }

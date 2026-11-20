@@ -22,7 +22,10 @@
   <button id="film" class="btn">📹 Filmer une épreuve</button>
   <section id="camera" class="panel" hidden>
     <p class="lead">Ton téléphone devient une caméra de l'émission.</p>
-    <p class="wifi"><b>📶 Connecte-toi d'abord au Wi-Fi de la maison.</b>En 4G ou 5G, la vidéo ne passe pas : la caméra ne démarrera pas.</p>
+    <p class="wifi"><b>📶 Connecte-toi d'abord au Wi-Fi de la maison.</b>
+      {%- if cfg.wifi_name %}<span>Réseau : <code>{{ cfg.wifi_name }}</code></span>{% endif %}
+      {%- if cfg.wifi_password %}<span>Mot de passe : <code>{{ cfg.wifi_password }}</code></span>{% endif %}
+      <span>En 4G ou 5G, la vidéo ne passe pas : la caméra ne démarrera pas.</span></p>
     <button id="go" class="btn btn-primary" disabled>📹 Passer à l'antenne</button>
     <p class="hint">Il faut ton nom, tout en haut. Tiens le téléphone à l'horizontale et garde cette page ouverte.</p>
   </section>

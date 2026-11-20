@@ -24,6 +24,7 @@ Live TV for a Koh-Lanta themed party ("Coco Lanta": Rouge Faucille against Rouge
 | `COCO_LIVEKIT_URL` | The LiveKit server as browsers reach it (`wss://...`) |
 | `COCO_LIVEKIT_API_KEY`, `COCO_LIVEKIT_API_SECRET` | A key pair of that server |
 | `COCO_REGIE_PASSWORD` | Control room password (empty: open) |
+| `COCO_WIFI_NAME`, `COCO_WIFI_PASSWORD` | Optional: the house Wi-Fi, shown to guests who want to film |
 
 ## Development
 
