@@ -50,13 +50,14 @@
   </section>
 
   <section class="panel">
-    <h2>Bandeau (reste affiché)</h2>
-    <form id="banner" class="row">
-      <input id="banner-text" maxlength="60" autocomplete="off" placeholder="Épreuve des poteaux">
-      <button class="btn btn-primary">Afficher</button>
-      <button type="button" id="banner-clear" class="btn">✕</button>
+    <h2>Message plein écran</h2>
+    <form id="stinger" class="row">
+      <input id="stinger-text" maxlength="100" autocomplete="off" placeholder="Épreuve des poteaux">
+      <button class="btn" title="L'affiche quelques secondes">Flash</button>
+      <button type="button" id="card-keep" class="btn btn-primary" title="Le laisse à l'écran jusqu'à ce que tu le retires">Garder</button>
     </form>
-    <h2>Plein écran, quelques secondes</h2>
+    <p id="card-now" class="held" hidden><span>Reste affiché : <b></b></span><button type="button" id="card-clear" class="btn">Retirer</button></p>
+    <h2>Annonces rapides, quelques secondes</h2>
     <div class="chips" id="stingers">
       <button>La sentence est irrévocable</button>
       <button>Épreuve d'immunité</button>
@@ -65,13 +66,6 @@
       <button>Victoire de Rouge Faucille</button>
       <button>Victoire de Rouge Marteau</button>
     </div>
-    <h2>Plein écran, message libre</h2>
-    <form id="stinger" class="row">
-      <input id="stinger-text" maxlength="100" autocomplete="off" placeholder="Pause repas, reprise à 21 h">
-      <button class="btn" title="L'affiche quelques secondes">Flash</button>
-      <button type="button" id="card-keep" class="btn btn-primary" title="Le laisse à l'écran jusqu'à ce que tu le retires">Garder</button>
-    </form>
-    <p id="card-now" class="held" hidden><span>À l'écran : <b></b></span><button type="button" id="card-clear" class="btn">Retirer</button></p>
   </section>
 
   <section class="panel">

@@ -105,10 +105,8 @@ def test_camera_joins_and_regie_runs_the_show(client: TestClient) -> None:
             )
             assert state(regie)["scores"] == {"faucille": 0, "marteau": 1}
 
-            regie.send_json(
-                {"type": "cmd", "cmd": "banner", "text": "  Les   poteaux "}
-            )
-            assert state(regie)["banner"] == "Les poteaux"
+            regie.send_json({"type": "cmd", "cmd": "card", "text": "  Les   poteaux "})
+            assert state(regie)["card"] == "Les poteaux"
 
             regie.send_json({"type": "cmd", "cmd": "stinger", "text": "Le conseil"})
             assert receive(tv, "stinger")["text"] == "Le conseil"

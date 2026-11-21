@@ -302,14 +302,6 @@ body.idle #live-badge, body.idle #scores { display: none; }
 }
 .tv #timer.urgent { background: var(--faucille); color: #fff; animation: blink .5s infinite; }
 
-.tv #banner {
-  position: fixed; top: 16vh; left: 50%; transform: translateX(-50%) rotate(-1.5deg); z-index: 5;
-  padding: .5vw 3vw; white-space: nowrap; background: var(--sand); color: var(--jungle);
-  border-top: .45vw solid var(--sun); border-bottom: .45vw solid var(--sun);
-  font-family: var(--display); font-size: 3.1vw;
-}
-body.idle #banner { top: 7vh; left: auto; right: 4vw; transform: rotate(-1.5deg); }
-
 .tv #corner-qr {
   position: fixed; right: 2vw; bottom: 4vh; z-index: 5; width: 9vw; padding: .5vw; border-radius: .9vw;
   border: .3vw solid var(--wood); background: var(--cream); color: var(--jungle); text-align: center; font-weight: 800; font-size: 1.05vw;
