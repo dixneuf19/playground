@@ -39,6 +39,7 @@ class Show:
         self.scores = dict.fromkeys(TEAMS, 0)
         self.audio = True
         self.qr = True
+        self.sides = False  # the captioned reactions of one particular game
         self.timer_ends: float | None = None  # running: when it reaches zero
         self.timer_left: float | None = None  # paused: what is left
         self._switched_at = 0.0
@@ -179,5 +180,6 @@ class Show:
             "scores": self.scores,
             "audio": self.audio,
             "qr": self.qr,
+            "sides": self.sides,
             "timer": {"ends": self.timer_ends, "left": self.timer_left},
         }

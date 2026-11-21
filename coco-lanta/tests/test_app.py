@@ -171,7 +171,20 @@ def test_a_card_stays_until_the_control_room_removes_it(client: TestClient) -> N
         assert state(regie)["card"] == ""
 
 
-def test_the_three_sides_have_a_caption(client: TestClient) -> None:
-    page = client.get("/").text
-    for caption in ("extrême gauche", "extrême centre", "extrême droite"):
-        assert caption in page
+def test_the_sides_game_is_off_until_the_control_room_starts_it(
+    client: TestClient,
+) -> None:
+    assert '<div class="sides" id="sides" hidden>' in client.get("/").text
+    with (
+        client.websocket_connect(REGIE) as regie,
+        client.websocket_connect("/ws?role=tv") as tv,
+        client.websocket_connect("/ws?role=react") as phone,
+    ):
+        assert state(phone)["sides"] is False
+        phone.send_json({"type": "react", "emoji": "🤑"})  # not while the game is off
+        phone.send_json({"type": "react", "emoji": "🔥"})
+        assert receive(tv, "react")["emoji"] == "🔥"
+        regie.send_json({"type": "cmd", "cmd": "sides", "on": True})
+        assert state(phone)["sides"] is True
+        phone.send_json({"type": "react", "emoji": "🤑"})
+        assert receive(tv, "react")["emoji"] == "🤑"

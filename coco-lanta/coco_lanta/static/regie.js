@@ -47,6 +47,7 @@ function render() {
   for (const team of ["faucille", "marteau"]) $(`score-${team}`).textContent = s.scores[team];
   $("audio").classList.toggle("on", s.audio);
   $("qr").classList.toggle("on", s.qr);
+  $("sides").classList.toggle("on", s.sides);
 }
 
 setInterval(() => {
@@ -120,6 +121,7 @@ $("stinger").addEventListener("submit", (e) => {
 });
 $("audio").addEventListener("click", () => cmd("audio", { on: !current.audio }));
 $("qr").addEventListener("click", () => cmd("qr", { on: !current.qr }));
+$("sides").addEventListener("click", () => cmd("sides", { on: !current.sides }));
 
 // Silent thumbnails of every camera.
 async function watch() {
