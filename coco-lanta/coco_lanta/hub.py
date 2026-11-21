@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 SEND_TIMEOUT = 5  # a phone that stops reading is dropped, not waited for
 KICKED = 4403  # close code: the camera page stops and says so
-# The first three get a caption on the phones: pick your extreme.
+# Captioned reactions for one game: phones only show them while the control
+# room has turned that game on.
 SIDES = {"☭": "extrême gauche", "🤑": "extrême centre", "🚫": "extrême droite"}
 EMOJI = (*SIDES, "🔥", "👏", "😂", "❤️", "🌴")
 CARD_MAX = 100
@@ -140,8 +141,10 @@ class Hub:
         now = time.time()
         kind = msg.get("type")
         if kind == "react":
-            if msg.get("emoji") in REACTIONS and client.reactions.take(now):
-                await self._event(("tv",), type="react", emoji=msg["emoji"])
+            emoji = msg.get("emoji")
+            allowed = emoji in REACTIONS and (self.show.sides or emoji not in SIDES)
+            if allowed and client.reactions.take(now):
+                await self._event(("tv",), type="react", emoji=emoji)
         elif kind == "comment":
             text = clean(msg.get("text"), COMMENT_MAX)
             if text and client.comments.take(now):
@@ -184,6 +187,8 @@ class Hub:
                 show.card = clean(msg.get("text"), CARD_MAX)
             case "audio":
                 show.audio = bool(msg.get("on"))
+            case "sides":
+                show.sides = bool(msg.get("on"))
             case "qr":
                 show.qr = bool(msg.get("on"))
             case "stinger":

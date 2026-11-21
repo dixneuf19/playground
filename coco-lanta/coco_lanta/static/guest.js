@@ -14,7 +14,10 @@ nameInput.addEventListener("change", () => store("name", nameInput.value.trim())
 
 // --- reactions --------------------------------------------------------------
 
-const show = connectShow("react", () => ({}), {});
+const show = connectShow("react", () => ({}), {
+  // The three "extremes" belong to one game: the control room turns them on.
+  state(s) { $("sides").hidden = !s.sides; },
+});
 
 function react(e) {
   const button = e.target.closest("button");
