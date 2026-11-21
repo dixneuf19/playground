@@ -1,4 +1,4 @@
-// The control room: pick what is on air, scores, timer, banners.
+// The control room: pick what is on air, scores, timer, full-screen messages.
 const { Room, RoomEvent, Track, VideoQuality } = LivekitClient;
 
 const $ = (id) => document.getElementById(id);
@@ -47,7 +47,6 @@ function render() {
   for (const team of ["faucille", "marteau"]) $(`score-${team}`).textContent = s.scores[team];
   $("audio").classList.toggle("on", s.audio);
   $("qr").classList.toggle("on", s.qr);
-  if (document.activeElement !== $("banner-text")) $("banner-text").value = s.banner;
 }
 
 setInterval(() => {
@@ -104,12 +103,6 @@ $("timer-custom").addEventListener("submit", (e) => {
 });
 $("timer-toggle").addEventListener("click", () => cmd("timer_toggle"));
 $("timer-reset").addEventListener("click", () => cmd("timer_reset"));
-$("banner").addEventListener("submit", (e) => {
-  e.preventDefault();
-  cmd("banner", { text: $("banner-text").value });
-  $("banner-text").blur();
-});
-$("banner-clear").addEventListener("click", () => cmd("banner", { text: "" }));
 $("stingers").addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if (b) cmd("stinger", { text: b.textContent });

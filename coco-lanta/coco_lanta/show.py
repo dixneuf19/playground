@@ -1,4 +1,4 @@
-"""The show: which cameras exist, what is on air, scores, timer, banner.
+"""The show: which cameras exist, what is on air, scores, timer, message.
 
 Pure state with the clock passed in, so the automatic director is testable.
 Kept in memory: one replica, one party. A restart forgets scores and timer;
@@ -37,7 +37,6 @@ class Show:
         self.muted: set[str] = set()
         self.card = ""  # a full-screen message that stays until removed
         self.scores = dict.fromkeys(TEAMS, 0)
-        self.banner = ""
         self.audio = True
         self.qr = True
         self.timer_ends: float | None = None  # running: when it reaches zero
@@ -178,7 +177,6 @@ class Show:
             "card": self.card,
             "on_air": self.on_air(),
             "scores": self.scores,
-            "banner": self.banner,
             "audio": self.audio,
             "qr": self.qr,
             "timer": {"ends": self.timer_ends, "left": self.timer_left},

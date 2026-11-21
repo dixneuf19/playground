@@ -28,7 +28,6 @@ CARD_MAX = 100
 REACTIONS = (*EMOJI, *TEAMS)  # a team name floats up as its icon
 COMMENT_MAX = 80
 NAME_MAX = 24
-BANNER_MAX = 60
 
 
 def clean(text: object, limit: int) -> str:
@@ -181,8 +180,6 @@ class Hub:
                 show.timer_toggle(now)
             case "timer_reset":
                 show.timer_reset()
-            case "banner":
-                show.banner = clean(msg.get("text"), BANNER_MAX)
             case "card":
                 show.card = clean(msg.get("text"), CARD_MAX)
             case "audio":
@@ -190,7 +187,7 @@ class Hub:
             case "qr":
                 show.qr = bool(msg.get("on"))
             case "stinger":
-                text = clean(msg.get("text"), BANNER_MAX)
+                text = clean(msg.get("text"), CARD_MAX)
                 if text:
                     await self._event(("tv",), type="stinger", text=text)
             case "kick":

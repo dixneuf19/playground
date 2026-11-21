@@ -5,8 +5,8 @@ Live TV for a Koh-Lanta themed party ("Coco Lanta": Rouge Faucille against Rouge
 | Page | Who | What |
 |---|---|---|
 | `/` | guests (the one QR code) | Emoji and comments shown on the TV. Whoever wants to film picks a team and the phone becomes a camera, with a red frame when it is on air |
-| `/tv` | laptop on the TV | The program: video, names, scores, timer, banner, reactions |
-| `/regie` | the host | Pick the camera or leave it on auto, layouts (solo, duel, mosaic), scores, timer, banners, full-screen announcements |
+| `/tv` | laptop on the TV | The program: video, names, scores, timer, full-screen messages, reactions |
+| `/regie` | the host | Pick the camera or leave it on auto, layouts (solo, duel, mosaic), scores, timer, full-screen messages (a few seconds, or kept until removed), per-camera mute |
 | `/affiche` | printing | Poster with the QR code |
 
 ## How it works
