@@ -32,9 +32,10 @@ class Show:
         self.layout = "solo"
         self.program: str | None = None  # on air in the solo layout
         self.duo: list[str] = []  # the two cameras of the duel layout
-        # Mosaic: every camera at once is a racket, so each one is silent
-        # until the control room turns its sound on.
-        self.heard: set[str] = set()
+        # Phones start with their microphone off, so everything on air is
+        # heard by default: the control room only mutes who it needs to.
+        self.muted: set[str] = set()
+        self.card = ""  # a full-screen message that stays until removed
         self.scores = dict.fromkeys(TEAMS, 0)
         self.banner = ""
         self.audio = True
@@ -84,11 +85,11 @@ class Show:
         self._switch(cam_id, now)
 
     def hear(self, cam_id: str, on: bool) -> None:
-        """The control room turns one camera's sound on or off in the mosaic."""
-        if on and cam_id in self.cameras:
-            self.heard.add(cam_id)
-        else:
-            self.heard.discard(cam_id)
+        """The control room mutes one camera, or lets it be heard again."""
+        if on:
+            self.muted.discard(cam_id)
+        elif cam_id in self.cameras:
+            self.muted.add(cam_id)
 
     def set_auto(self, now: float) -> None:
         self.auto = True
@@ -143,7 +144,7 @@ class Show:
             self.auto = True  # the manual pick left: the show goes on
             self._switch(self._next(), now)
         self.duo = [cam_id for cam_id in self.duo if cam_id in self.cameras]
-        self.heard &= set(self.cameras)
+        self.muted &= set(self.cameras)
         spare = [cam_id for cam_id in self.cameras if cam_id not in self.duo]
         self.duo += spare[: 2 - len(self.duo)]
 
@@ -173,7 +174,8 @@ class Show:
             "layout": self.layout,
             "program": self.program,
             "duo": self.duo,
-            "heard": sorted(self.heard),
+            "muted": sorted(self.muted),
+            "card": self.card,
             "on_air": self.on_air(),
             "scores": self.scores,
             "banner": self.banner,

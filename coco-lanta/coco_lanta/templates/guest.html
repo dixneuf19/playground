@@ -12,6 +12,9 @@
     <button type="button" class="team team-{{ key }}" data-emoji="{{ key }}"><span class="icon" data-icon="{{ key }}"></span> Allez {{ label }} !</button>
     {% endfor %}
   </div>
+  <div class="sides" id="sides">
+    {% for e, label in sides.items() %}<button type="button" data-emoji="{{ e }}"><span>{{ e }}</span>{{ label }}</button>{% endfor %}
+  </div>
   <div class="emojis" id="emojis">
     {% for e in emoji %}<button type="button" data-emoji="{{ e }}">{{ e }}</button>{% endfor %}
   </div>

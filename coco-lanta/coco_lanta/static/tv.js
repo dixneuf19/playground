@@ -7,6 +7,7 @@ const tiles = new Map(); // camera id -> { el, audio: RemoteAudioTrack | null }
 let current = null; // last show state
 let room = null;
 let audioCtx = null;
+let stingerTimer = null; // set while a flash announcement plays
 
 function tile(id) {
   let t = tiles.get(id);
@@ -29,11 +30,11 @@ function render() {
     const cam = cams.get(id);
     const onAir = s.on_air.includes(id);
     t.el.hidden = !cam;
-    // Every camera at once is a racket: in the mosaic a camera is silent
-    // until the control room turns its sound on.
-    const heard = s.audio && (s.layout === "mosaic" ? s.heard.includes(id) : onAir);
+    // Whatever is on air is heard, unless the control room muted that camera.
+    const muted = s.muted.includes(id);
+    const heard = s.audio && onAir && !muted;
     t.el.classList.toggle("on", onAir);
-    t.el.classList.toggle("heard", heard && s.layout === "mosaic");
+    t.el.classList.toggle("muted", muted);
     t.audio?.setVolume(heard ? 1 : 0);
     if (!cam) continue;
     // Same order as the show and as the control room's thumbnails.
@@ -49,6 +50,17 @@ function render() {
   $("banner").hidden = !s.banner;
   $("banner").textContent = s.banner;
   $("corner-qr").hidden = !s.qr || s.on_air.length === 0;
+  renderCard();
+}
+
+// A full-screen message the control room keeps up until it removes it.
+function renderCard() {
+  if (stingerTimer) return; // a flash announcement is playing: it puts the card back
+  const el = $("stinger");
+  el.classList.remove("play");
+  el.classList.toggle("hold", Boolean(current?.card));
+  el.hidden = !current?.card;
+  if (current?.card) el.querySelector("span").textContent = current.card;
 }
 
 let timerWasRunning = false;
@@ -103,17 +115,16 @@ function comment(msg) {
   setTimeout(() => el.remove(), 12000);
 }
 
-let stingerTimer;
 function stinger(text) {
   const el = $("stinger");
   el.querySelector("span").textContent = text;
   el.hidden = false;
-  el.classList.remove("play");
+  el.classList.remove("play", "hold");
   void el.offsetWidth; // restart the animation
   el.classList.add("play");
   drum();
   clearTimeout(stingerTimer);
-  stingerTimer = setTimeout(() => { el.hidden = true; }, 4500);
+  stingerTimer = setTimeout(() => { stingerTimer = null; el.hidden = true; renderCard(); }, 4500);
 }
 
 // --- the show socket and the video room ------------------------------------

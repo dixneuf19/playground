@@ -27,6 +27,7 @@ function react(e) {
 }
 $("emojis").addEventListener("click", react);
 $("cheers").addEventListener("click", react);
+$("sides").addEventListener("click", react);
 
 $("comment").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -112,8 +113,8 @@ async function start() {
     room.on(RoomEvent.Disconnected, () => { if (me) stopCamera("Connexion vidéo perdue. Vérifie que tu es sur le Wi-Fi de la maison, puis relance la caméra."); });
     await room.connect(me.url, me.token);
     await room.localParticipant.setCameraEnabled(true);
-    // No microphone (refused, or none) still makes a fine camera.
-    try { await room.localParticipant.setMicrophoneEnabled(true); } catch { $("mic").classList.add("off"); }
+    // The microphone starts off: whoever films turns it on when it is worth hearing.
+    showMic(false);
     cameraTrack().attach($("preview"));
   } catch (err) {
     await stopCamera(startError(err));
@@ -160,8 +161,19 @@ $("flip").addEventListener("click", async () => {
   facing = facing === "environment" ? "user" : "environment";
   await cameraTrack()?.restartTrack({ facingMode: facing });
 });
+function showMic(on) {
+  $("mic").classList.toggle("off", !on);
+  $("mic").textContent = on ? "🎙️" : "🔇";
+  $("mic").title = on ? "Couper le micro" : "Activer le micro";
+}
+
 $("mic").addEventListener("click", async () => {
   const on = !room.localParticipant.isMicrophoneEnabled;
-  await room.localParticipant.setMicrophoneEnabled(on);
-  $("mic").classList.toggle("off", !on);
+  try {
+    await room.localParticipant.setMicrophoneEnabled(on);
+    setStatus("");
+  } catch {
+    setStatus("Micro refusé : autorise-le pour ce site.");
+  }
+  showMic(room.localParticipant.isMicrophoneEnabled);
 });

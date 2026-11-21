@@ -162,3 +162,18 @@ def test_wifi_password_is_shown_only_when_set(client: TestClient) -> None:
     page = with_wifi.get("/").text
     assert "<code>Lagon</code>" in page
     assert "<code>s3same</code>" in page
+
+
+def test_a_card_stays_until_the_control_room_removes_it(client: TestClient) -> None:
+    with client.websocket_connect(REGIE) as regie:
+        state(regie)
+        regie.send_json({"type": "cmd", "cmd": "card", "text": " Pause  repas "})
+        assert state(regie)["card"] == "Pause repas"
+        regie.send_json({"type": "cmd", "cmd": "card", "text": ""})
+        assert state(regie)["card"] == ""
+
+
+def test_the_three_sides_have_a_caption(client: TestClient) -> None:
+    page = client.get("/").text
+    for caption in ("extrême gauche", "extrême centre", "extrême droite"):
+        assert caption in page

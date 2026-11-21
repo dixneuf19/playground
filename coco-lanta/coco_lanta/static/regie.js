@@ -29,17 +29,18 @@ function render() {
       el = document.createElement("div");
       el.className = "cam";
       el.dataset.id = cam.id;
-      el.innerHTML = '<video autoplay playsinline muted></video><div class="label"><b></b></div><button class="sound" title="Son de cette caméra dans la mosaïque"></button><button class="kick" title="Couper cette caméra">✕</button>';
+      el.innerHTML = '<video autoplay playsinline muted></video><div class="label"><b></b></div><button class="sound" title="Couper ou remettre le son de cette caméra"></button><button class="kick" title="Couper cette caméra">✕</button>';
       cams.append(el);
       videos.get(cam.id)?.attach(el.querySelector("video"));
     }
     el.classList.toggle("on", s.on_air.includes(cam.id));
-    const heard = s.heard.includes(cam.id);
-    el.querySelector(".sound").textContent = heard ? "🔊" : "🔇";
-    el.querySelector(".sound").classList.toggle("on", heard);
+    const muted = s.muted.includes(cam.id);
+    el.querySelector(".sound").textContent = muted ? "🔇" : "🔊";
+    el.querySelector(".sound").classList.toggle("off", muted);
     el.querySelector("b").textContent = cam.name;
   }
-  cams.dataset.layout = s.layout;
+  $("card-now").hidden = !s.card;
+  $("card-now").querySelector("b").textContent = s.card;
   $("empty").hidden = s.cameras.length > 0;
   $("auto").classList.toggle("on", s.auto && s.layout === "solo");
   document.querySelectorAll("#layouts button").forEach((b) => b.classList.toggle("on", b.dataset.layout === s.layout));
@@ -67,7 +68,7 @@ cams.addEventListener("click", (e) => {
   const cam = e.target.closest(".cam");
   if (!cam) return;
   if (e.target.closest(".sound")) {
-    cmd("hear", { id: cam.dataset.id, on: !current.heard.includes(cam.dataset.id) });
+    cmd("hear", { id: cam.dataset.id, on: current.muted.includes(cam.dataset.id) });
   } else if (e.target.closest(".kick")) {
     if (confirm("Couper cette caméra ?")) cmd("kick", { id: cam.dataset.id });
   } else {
@@ -86,6 +87,21 @@ $("score-reset").addEventListener("click", () => { if (confirm("Remettre les sco
 document.querySelectorAll("[data-timer]").forEach((b) => b.addEventListener("click", () => {
   cmd("timer_start", { seconds: Number(b.dataset.timer) });
 }));
+// "7" is seven minutes, "2:30" two and a half, "0:45" forty-five seconds.
+function parseDuration(text) {
+  const [minutes, seconds = "0"] = text.trim().replace(",", ".").split(":");
+  const total = Number(minutes) * 60 + Number(seconds);
+  return Number.isFinite(total) && total > 0 ? Math.round(total) : null;
+}
+$("timer-custom").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const seconds = parseDuration($("timer-text").value);
+  $("timer-text").classList.toggle("missing", seconds == null);
+  if (seconds == null) return;
+  cmd("timer_start", { seconds });
+  $("timer-text").value = "";
+  $("timer-text").blur();
+});
 $("timer-toggle").addEventListener("click", () => cmd("timer_toggle"));
 $("timer-reset").addEventListener("click", () => cmd("timer_reset"));
 $("banner").addEventListener("submit", (e) => {
@@ -98,6 +114,12 @@ $("stingers").addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if (b) cmd("stinger", { text: b.textContent });
 });
+$("card-keep").addEventListener("click", () => {
+  if (!$("stinger-text").value.trim()) return;
+  cmd("card", { text: $("stinger-text").value });
+  $("stinger-text").value = "";
+});
+$("card-clear").addEventListener("click", () => cmd("card", { text: "" }));
 $("stinger").addEventListener("submit", (e) => {
   e.preventDefault();
   cmd("stinger", { text: $("stinger-text").value });
