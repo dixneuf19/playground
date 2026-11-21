@@ -21,7 +21,10 @@ logger = logging.getLogger(__name__)
 
 SEND_TIMEOUT = 5  # a phone that stops reading is dropped, not waited for
 KICKED = 4403  # close code: the camera page stops and says so
-EMOJI = ("🔥", "☭", "🌴", "👏", "😂", "😱", "❤️", "🥥", "✊", "🐍")
+# The first three get a caption on the phones: pick your extreme.
+SIDES = {"☭": "extrême gauche", "🤑": "extrême centre", "🚫": "extrême droite"}
+EMOJI = (*SIDES, "🔥", "👏", "😂", "❤️", "🌴")
+CARD_MAX = 100
 REACTIONS = (*EMOJI, *TEAMS)  # a team name floats up as its icon
 COMMENT_MAX = 80
 NAME_MAX = 24
@@ -180,6 +183,8 @@ class Hub:
                 show.timer_reset()
             case "banner":
                 show.banner = clean(msg.get("text"), BANNER_MAX)
+            case "card":
+                show.card = clean(msg.get("text"), CARD_MAX)
             case "audio":
                 show.audio = bool(msg.get("on"))
             case "qr":

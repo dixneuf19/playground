@@ -23,7 +23,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from coco_lanta.config import Settings, settings
-from coco_lanta.hub import EMOJI, NAME_MAX, Client, Hub, clean
+from coco_lanta.hub import EMOJI, NAME_MAX, SIDES, Client, Hub, clean
 from coco_lanta.show import TEAMS
 from coco_lanta.tokens import access_token
 
@@ -70,7 +70,13 @@ def create_app(cfg: Settings = settings) -> FastAPI:
         return templates.TemplateResponse(
             request,
             f"{name}.html",
-            {"emoji": EMOJI, "teams": TEAMS, "static": static_url, "cfg": cfg},
+            {
+                "sides": SIDES,
+                "emoji": [e for e in EMOJI if e not in SIDES],
+                "teams": TEAMS,
+                "static": static_url,
+                "cfg": cfg,
+            },
         )
 
     @app.get("/healthz")
