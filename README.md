@@ -11,4 +11,11 @@ Small projects, scripts, and experiments — mostly things I deploy on my homela
 | [vitry-auberge-bot](vitry-auberge-bot/) | Telegram bot reminding the Vitry flatmates of their chores (bins, vegetables pickup, cleaning) and La Fourche deliveries |
 | [sfr-mms-bot](sfr-mms-bot/) | Telegram bot: forward it an SFR "vous a envoyé un MMS" SMS, it fetches the MMS from vosmms.com |
 | [cluedo-vitry](cluedo-vitry/) | Sam Marsalis's music blog, a prop website for the Vitry murder party (sam-marsalis.dixneuf19.fr) |
-| [coco-lanta](coco-lanta/) | Live TV for a Koh-Lanta themed party: phones are cameras (LiveKit), a control room picks what the living room TV shows |
+
+## Archived
+
+Removed from `main` once they had served, the code stays reachable through a tag.
+
+| Project | Tag | Description |
+|---|---|---|
+| coco-lanta | [`archive/coco-lanta`](https://github.com/dixneuf19/playground/tree/archive/coco-lanta/coco-lanta) | Live TV for a Koh-Lanta themed party: phones are cameras (LiveKit), a control room picks what the living room TV shows |
