@@ -1,0 +1,20 @@
+title: DevOps ou platform ?
+date: 2026-11-23
+axes:
+  x: { neg: Pas DevOps, pos: DevOps }
+  y: { neg: Pas platform, pos: Platform }
+candidates:
+  - { id: jenkins, name: Jenkins, emoji: "🤵" }
+  - { id: kargo, name: Kargo, emoji: "🚢" }
+  - { id: opensearch, name: OpenSearch, emoji: "🔎" }
+  - { id: helm, name: Helm, emoji: "☸️" }
+  - { id: ian, name: Ian, emoji: "🧑‍💻" }
+  - { id: padoa, name: Padoa, emoji: "🩺" }
+  - { id: theatre, name: Le théâtre, emoji: "🎭" }
+  - { id: bastille, name: La prise de la Bastille, emoji: "⚔️" }
+  - { id: ci-cd, name: La CI/CD, emoji: "🔁" }
+  - { id: devsecops, name: DevSecOps, emoji: "🔐" }
+  - { id: odyssex, name: L'Odyssex, emoji: "⛵" }
+  - { id: roller, name: Le roller, emoji: "🛼" }
+  - { id: antoine-pub, name: Antoine de la pub, emoji: "📺" }
+  - { id: fred, name: Fred, emoji: "🧑" }
