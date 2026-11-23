@@ -29,7 +29,7 @@
 
 * { box-sizing: border-box; }
 
-html, body { margin: 0; }
+html, body { margin: 0; overscroll-behavior-x: none; }
 
 body {
     background: var(--bg);
@@ -135,6 +135,35 @@ button { font: inherit; }
 .lab-xn { left: 6px; top: 50%; transform: translateY(-130%); text-align: left; }
 .lab-xp { right: 6px; top: 50%; transform: translateY(-130%); text-align: right; }
 
+.heat { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+
+.consensus {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    z-index: 4;
+    font-size: 13px;
+    background: var(--panel);
+    padding: 2px 8px;
+    border-radius: 6px;
+    pointer-events: auto;
+}
+.consensus strong { color: var(--accent); }
+
+.median { fill: var(--panel); fill-opacity: 0.75; stroke-width: 2.5; stroke-dasharray: 4 3; }
+.median-label {
+    font-size: 14px;
+    text-anchor: middle;
+    dominant-baseline: central;
+    font-family: "Noto Color Emoji", system-ui, sans-serif;
+    opacity: 0.75;
+}
+
+.tokens .tok.theirs .dot { border-style: dashed; opacity: 0.8; }
+
+.medopt { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; }
+.medopt input { width: 18px; height: 18px; accent-color: var(--accent); }
+
 .lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
 
 .tokens { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
@@ -155,6 +184,10 @@ button { font: inherit; }
     border: 0;
     padding: 0;
     color: var(--ink);
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .tok .dot {
@@ -191,7 +224,8 @@ button { font: inherit; }
 }
 
 .tok.selected .dot { outline: 3px solid var(--accent); outline-offset: 2px; }
-.tok.faded { opacity: 0.18; }
+.tok.faded { opacity: 0.15; }
+.tokens .tok.faded { opacity: 0.1; }
 .tok.focus { z-index: 2; }
 .tok.focus .dot { transform: scale(1.12); }
 
@@ -216,7 +250,8 @@ button { font: inherit; }
     justify-items: center;
 }
 .tray:empty { display: none; }
-.tray .tok.placeholder { visibility: hidden; }
+/* Tokens that only answer taps leave the page free to scroll */
+.tok.tap-only { touch-action: manipulation; }
 
 .tray .legend {
     grid-column: 1 / -1;
@@ -254,21 +289,12 @@ button { font: inherit; }
 .noscript { padding: 24px; text-align: center; }
 
 @media (max-width: 959px) {
-    .side {
-        position: sticky;
-        bottom: 0;
-    }
     .tray {
-        display: flex;
-        overflow-x: auto;
-        overscroll-behavior-x: contain;
-        gap: 6px;
-        padding: 10px 8px;
+        grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
+        gap: 8px 4px;
+        padding: 10px 6px;
     }
-    .tray .tok { flex: 0 0 76px; touch-action: pan-x; }
-    .tray .legend { flex: 1; }
-    .bar {
-        background: var(--bg);
-        padding: 8px 0 4px;
-    }
+    .tray .tok { width: 62px; }
+    .tray .tok .dot { width: 34px; height: 34px; font-size: 17px; }
+    .tray .tok .name { font-size: 10.5px; }
 }
