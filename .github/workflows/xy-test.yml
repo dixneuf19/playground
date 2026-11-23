@@ -1,0 +1,44 @@
+name: xy - Test
+
+on:
+  push:
+    paths:
+      - "xy/**"
+      - ".github/workflows/xy-test.yml"
+
+defaults:
+  run:
+    working-directory: xy
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine@sha256:123b17998ccaf47e53b502e8c6a1e79afd8f579c6f3eec83c563da026f957395
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 15
+    env:
+      XY_TEST_DATABASE_URL: postgresql://postgres:test@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+
+      - run: uv python install
+
+      - run: uv sync --dev
+
+      - name: Check formatting and linting
+        run: make check-format
+
+      - name: Type check
+        run: make typecheck
+
+      - name: Test with pytest
+        run: make test

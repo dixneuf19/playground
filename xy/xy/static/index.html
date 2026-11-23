@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deux axes</title>
+    <meta name="description" content="Deux axes, des candidats à placer, et le graphique de tout le monde.">
+    <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap">
+    <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="app">
+    <header class="head">
+        <a class="brand" href="/">Deux axes</a>
+        <h1 class="title" id="title"></h1>
+        <p class="hint" id="hint"></p>
+        <details class="rounds" id="roundsBox" hidden>
+            <summary>Autres manches</summary>
+            <nav id="rounds"></nav>
+        </details>
+    </header>
+
+    <main class="board">
+        <div class="field" id="field">
+            <svg class="lines" id="lines" aria-hidden="true"></svg>
+            <div class="axis axis-x"></div>
+            <div class="axis axis-y"></div>
+            <div class="lab lab-yp" id="labYp"></div>
+            <div class="lab lab-yn" id="labYn"></div>
+            <div class="lab lab-xn" id="labXn"></div>
+            <div class="lab lab-xp" id="labXp"></div>
+            <div class="tokens" id="tokens"></div>
+        </div>
+    </main>
+
+    <aside class="side">
+        <div class="tray" id="tray"></div>
+        <div class="bar">
+            <button class="btn" id="mainBtn" disabled>Valider</button>
+            <button class="btn ghost" id="shareBtn" hidden>Partager</button>
+            <span class="status" id="status" role="status"></span>
+        </div>
+        <div class="pop" id="confirmPop" role="dialog" aria-labelledby="popText" hidden>
+            <p id="popText"></p>
+            <div class="pop-actions">
+                <button class="btn" id="popOk">Valider quand même</button>
+                <button class="btn ghost" id="popCancel">Continuer</button>
+            </div>
+        </div>
+    </aside>
+</div>
+<noscript><p class="noscript">Il faut activer JavaScript pour jouer.</p></noscript>
+<script src="/static/app.js"></script>
+</body>
+</html>

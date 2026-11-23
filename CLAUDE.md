@@ -84,3 +84,18 @@ uv sync             # Install dependencies
 make dev            # Serve the site on :8000
 make test           # Smoke test: start server.py and fetch pages
 ```
+
+### xy
+
+Two-axis game ("Deux axes", after xy.delemazure.fr): players drag candidates onto a chart, then see the median position of each. Rounds are YAML files in `xy/xy/rounds/`: the file name and the candidate ids key the answers, so never rename them once played. FastAPI + Postgres, plain JS page, no build step. All UI text is in French.
+
+**Common commands (run from `xy/`):**
+
+```bash
+uv sync             # Install dependencies
+make dev            # Postgres container + app on :8000 (needs docker)
+make format         # Format + lint fix
+make check-format   # Check formatting + linting
+make typecheck      # Type check with ty
+make test           # Unit tests (start a Postgres container)
+```
