@@ -18,3 +18,4 @@ candidates:
   - { id: roller, name: Le roller, emoji: "🛼" }
   - { id: antoine-pub, name: Antoine de la pub, emoji: "📺" }
   - { id: fred, name: Fred, emoji: "🧑" }
+  - { id: loup-garou, name: Le jeu du loup-garou, emoji: "🐺" }
