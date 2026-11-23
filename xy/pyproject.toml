@@ -1,0 +1,38 @@
+[project]
+name = "xy"
+version = "0.1.0"
+description = "Two-axis game: place candidates on a chart, then see where everyone put them"
+requires-python = ">=3.13"
+dependencies = [
+    "asyncpg>=0.32.0",
+    "fastapi>=0.115",
+    "pydantic>=2.10",
+    "pyyaml>=6.0",
+    "uvicorn[standard]>=0.32",
+]
+
+[project.scripts]
+xy = "xy.__main__:main"
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.16.0",
+    "pytest>=8.3",
+    "ruff>=0.11",
+    "ty>=0.0.1a7",
+]
+
+[tool.uv]
+exclude-newer = "3 days"
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "C4", "UP", "N", "W", "SIM", "ARG", "PIE", "T20", "RUF"]
+ignore = ["E501"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

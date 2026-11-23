@@ -11,6 +11,7 @@ Small projects, scripts, and experiments — mostly things I deploy on my homela
 | [vitry-auberge-bot](vitry-auberge-bot/) | Telegram bot reminding the Vitry flatmates of their chores (bins, vegetables pickup, cleaning) and La Fourche deliveries |
 | [sfr-mms-bot](sfr-mms-bot/) | Telegram bot: forward it an SFR "vous a envoyé un MMS" SMS, it fetches the MMS from vosmms.com |
 | [cluedo-vitry](cluedo-vitry/) | Sam Marsalis's music blog, a prop website for the Vitry murder party (sam-marsalis.dixneuf19.fr) |
+| [xy](xy/) | Deux axes: place candidates on a two-axis chart, then see where everyone put them (first round: the CentraleSupélec merger) |
 
 ## Archived
 

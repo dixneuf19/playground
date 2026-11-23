@@ -1,0 +1,24 @@
+title: La fusion CentraleSupélec
+date: 2026-11-23
+axes:
+  x: { neg: Centrale, pos: Supélec }
+  y: { neg: Absorption, pos: Fusion }
+candidates:
+  - { id: plateau-saclay, name: Le plateau de Saclay, emoji: "🌾" }
+  - { id: chatenay, name: Châtenay-Malabry, emoji: "🏚️" }
+  - { id: campus-metz, name: Le campus de Metz, emoji: "🏰" }
+  - { id: campus-rennes, name: Le campus de Rennes, emoji: "🌧️" }
+  - { id: bouygues, name: Le bâtiment Bouygues, emoji: "🏗️" }
+  - { id: breguet, name: Le bâtiment Bréguet, emoji: "🏢" }
+  - { id: eiffel, name: Le bâtiment Eiffel, emoji: "🗼" }
+  - { id: logo, name: Le logo, emoji: "🎨" }
+  - { id: nom, name: Le nom « CentraleSupélec », emoji: "🔤" }
+  - { id: cursus-2018, name: Le cursus 2018, emoji: "📚" }
+  - { id: bde, name: Le BDE, emoji: "🎉" }
+  - { id: gala, name: Le Gala, emoji: "🥂" }
+  - { id: alumni, name: Les alumni, emoji: "👴" }
+  - { id: electronique, name: L'électronique, emoji: "🔌" }
+  - { id: meca-flu, name: La méca flu, emoji: "🌊" }
+  - { id: ecoles-centrales, name: Les autres Centrales, emoji: "🏛️" }
+  - { id: paris-saclay, name: L'Université Paris-Saclay, emoji: "🎓" }
+  - { id: rer-b, name: Le RER B, emoji: "🚆" }
