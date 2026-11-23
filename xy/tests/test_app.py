@@ -15,7 +15,7 @@ def put(client: TestClient, positions: dict, player: uuid.UUID | None = None):
 
 
 def test_shipped_rounds_are_valid() -> None:
-    assert "centrale-supelec" in rounds.load(ROUNDS_DIR)
+    assert {"centrale-supelec", "devops-platform"} <= set(rounds.load(ROUNDS_DIR))
 
 
 def test_index_and_static(client: TestClient) -> None:
