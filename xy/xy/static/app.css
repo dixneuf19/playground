@@ -106,7 +106,7 @@ button { font: inherit; }
         var(--panel);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
-    touch-action: none;
+    touch-action: manipulation;
     user-select: none;
     -webkit-user-select: none;
 }
