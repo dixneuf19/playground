@@ -25,7 +25,10 @@
 
     <main class="board">
         <div class="field" id="field">
+            <canvas class="heat" id="heat" aria-hidden="true"></canvas>
             <svg class="lines" id="lines" aria-hidden="true"></svg>
+            <div class="consensus" id="consensus" hidden
+                 title="100 % : tout le monde place ce candidat au même endroit. 0 % : les réponses sont aussi dispersées que du hasard."></div>
             <div class="axis axis-x"></div>
             <div class="axis axis-y"></div>
             <div class="lab lab-yp" id="labYp"></div>
@@ -42,6 +45,7 @@
             <button class="btn" id="mainBtn" disabled>Valider</button>
             <button class="btn ghost" id="shareBtn" hidden>Partager</button>
             <span class="status" id="status" role="status"></span>
+            <label class="medopt" id="medOpt" hidden><input type="checkbox" id="medCb" checked> Points médians</label>
         </div>
         <div class="pop" id="confirmPop" role="dialog" aria-labelledby="popText" hidden>
             <p id="popText"></p>

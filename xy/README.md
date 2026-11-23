@@ -1,9 +1,15 @@
 # xy (Deux axes)
 
 A two-axis game: each round has two axes and a set of candidates. Players
-drag every candidate onto the chart, submit, then see where everyone put
-them: the median position of each candidate, their own answers linked to it,
-and the cloud of all answers for the candidate they tap.
+drag every candidate onto the chart and submit. Their candidates stay where
+they put them, each linked to everyone's median position (a dashed circle,
+toggled by "Points médians"). Tapping a candidate shows the heatmap of every
+answer for it and a consensus score. Players can keep moving their candidates
+afterwards: each drop is saved.
+
+Consensus is 1 minus the mean distance between two answers, divided by the
+mean distance between two uniform random points in the square (1.0428): 100 %
+when everyone agrees, 0 % when answers look random.
 
 Inspired by [XY, le Jeu des axes](https://xy.delemazure.fr/). This is an
 independent reimplementation of the mechanics: no code, text or images come
