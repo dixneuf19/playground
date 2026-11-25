@@ -19,3 +19,6 @@ candidates:
   - { id: antoine-pub, name: Antoine de la pub, emoji: "📺" }
   - { id: fred, name: Fred, emoji: "🧑" }
   - { id: loup-garou, name: Le jeu du loup-garou, emoji: "🐺" }
+  - { id: communaute-devops, name: La communauté DevOps, emoji: "👥" }
+  - { id: bash, name: Le bash, emoji: "🐚" }
+  - { id: notion, name: Notion, emoji: "📓" }
